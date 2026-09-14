@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+bin/
+obj/
+packages/
+
+# Environment
+.env
+.env.local
+*.env
+
+# Build output
+dist/
+build/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Editor
+.vs/
+.vscode/
+*.suo
+*.user
+
+# Office temp/lock files
+~$*
+
+# Claude local settings
+.claude/settings.local.json
