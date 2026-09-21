@@ -1,6 +1,6 @@
 -- ============================================================
 -- TBookStore — PostgreSQL functions
--- Chay sau schema.sql. Goi tu Dapper qua "SELECT * FROM fn(...)"
+-- Chay sau schema.sql. Goi tu FastAPI (psycopg) qua "SELECT * FROM fn(...)"
 -- hoac "SELECT fn(...)" tuy ham tra ve TABLE hay scalar.
 -- ============================================================
 
@@ -143,7 +143,7 @@ $$ LANGUAGE plpgsql;
 
 -- ------------------------------------------------------------
 -- 5. place_order — checkout: kiem tra ton kho, ap voucher, tao don,
---    tru ton kho, xoa gio hang. Chay trong 1 transaction (Dapper mo transaction bao ngoai).
+--    tru ton kho, xoa gio hang. Chay trong 1 transaction (psycopg goi ham trong 1 transaction).
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION place_order(
     p_user_id          BIGINT,

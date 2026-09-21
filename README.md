@@ -35,51 +35,61 @@ Dự án kế thừa schema và ý tưởng nghiệp vụ từ một prototype t
 
 | Thành phần | Công nghệ |
 |---|---|
-| Backend API | .NET 8 (ASP.NET Core Web API) |
-| Data access | Dapper |
-| Cơ sở dữ liệu | SQL Server |
+| Backend API | FastAPI (Python 3.12) chạy trên Uvicorn |
+| Validation / DTO | Pydantic v2 |
+| Data access | psycopg 3 (SQL thuần, gọi function PostgreSQL) |
+| Cơ sở dữ liệu | PostgreSQL |
 | Frontend | AngularJS (SPA, gọi API qua JWT) |
 | Cache | Redis |
-| Job nền | Hangfire |
-| Xuất PDF | QuestPDF |
-| Logging | Serilog |
-| Container hoá | Docker Compose (`api` + `sqlserver` + `redis` + `mailhog`) |
-| Test | xUnit (unit + integration) |
+| Job nền | Celery (broker Redis) |
+| Xuất PDF | ReportLab |
+| Logging | structlog |
+| Container hoá | Docker Compose (`api` + `postgres` + `redis` + `mailhog`) |
+| Test | pytest + httpx (unit + integration) |
 
-Frontend và Backend tách rời hoàn toàn: Backend chỉ cung cấp REST API (có Swagger), Frontend là ứng dụng AngularJS độc lập gọi API qua HTTP + JWT interceptor.
+Frontend và Backend tách rời hoàn toàn: Backend chỉ cung cấp REST API (Swagger UI/OpenAPI do FastAPI tự sinh), Frontend là ứng dụng AngularJS độc lập gọi API qua HTTP + JWT interceptor.
 
 ## 5. Cấu trúc thư mục
 
 ```
 TBookStore/
 ├── backend/
-│   ├── TBookStore.Api/            # Controllers, DI, Swagger, cấu hình
-│   ├── TBookStore.Application/    # Services, business logic
-│   ├── TBookStore.Infrastructure/ # Dapper repositories, Redis, Hangfire, QuestPDF
-│   ├── TBookStore.Domain/         # Entities, DTOs, enums
-│   └── TBookStore.Tests/          # Unit & integration tests
+│   ├── app/
+│   │   ├── main.py                # Khởi tạo FastAPI, đăng ký router, middleware
+│   │   ├── routers/               # Endpoint theo module (auth, books, cart, orders...)
+│   │   ├── services/              # Business logic
+│   │   ├── repositories/          # Truy cập DB bằng psycopg, gọi function PostgreSQL
+│   │   ├── schemas/               # Pydantic models (request/response DTO, enums)
+│   │   ├── core/                  # Cấu hình, DB pool, JWT/RBAC, Redis, Celery, PDF, logging
+│   │   └── scripts/               # migrate.py: chạy schema.sql, functions.sql, seed.sql
+│   ├── tests/                     # Unit & integration tests (pytest)
+│   ├── requirements.txt
+│   └── Dockerfile
 ├── frontend/
 │   └── src/
 │       ├── app/                   # AngularJS modules, controllers, services
 │       ├── views/                 # Templates theo role: admin/ staff/ customer/
 │       └── assets/                # CSS, hình ảnh
 ├── database/
-│   ├── schema.sql                 # Script tạo bảng (SQL Server)
+│   ├── schema.sql                 # Script tạo bảng (PostgreSQL)
+│   ├── migrations/                # Thay đổi bảng đánh số (001_*.sql...), chạy 1 lần mỗi file
+│   ├── functions.sql              # 12 function nghiệp vụ (PostgreSQL), chạy lại mỗi lần migrate
 │   └── seed.sql                   # Dữ liệu mẫu (≥ 2.000 bản ghi)
 ├── docs/
 │   ├── SRS.md
 │   ├── ERD.png
 │   └── TBookStore.postman_collection.json
 ├── docker-compose.yml
+├── .env.example
 └── README.md
 ```
 
 ## 6. Yêu cầu hệ thống
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
+- [Python 3.12+](https://www.python.org/downloads/)
 - [Docker](https://www.docker.com/) & Docker Compose
 - Node.js ≥ 18 (nếu cần build/serve Frontend riêng khi phát triển)
-- SQL Server client (Azure Data Studio / SSMS) — tuỳ chọn, để xem dữ liệu
+- PostgreSQL client (pgAdmin / DBeaver / psql) — tuỳ chọn, để xem dữ liệu
 
 ## 7. Cài đặt & chạy dự án
 
@@ -92,14 +102,14 @@ cd TBookStore
 cp .env.example .env
 # Chỉnh các biến: DB connection string, JWT secret, Redis, SMTP (Mailhog)...
 
-# 3. Khởi động toàn bộ hạ tầng (API + SQL Server + Redis + Mailhog)
+# 3. Khởi động toàn bộ hạ tầng (API + PostgreSQL + Redis + Mailhog)
 docker-compose up -d --build
 
 # 4. Khởi tạo schema + seed dữ liệu mẫu
-docker exec -it tbookstore-api dotnet run --project TBookStore.Api -- migrate --seed
+docker exec -it tbookstore-api python -m app.scripts.migrate --seed
 
 # 5. Truy cập
-# API & Swagger:   http://localhost:5000/swagger
+# API & Swagger:   http://localhost:8000/docs   (OpenAPI JSON: /openapi.json)
 # Frontend:        http://localhost:4200
 # Mailhog (email test): http://localhost:8025
 ```
@@ -108,15 +118,18 @@ Tài khoản mặc định sau khi seed (đổi mật khẩu ngay khi triển kh
 
 | Vai trò | Email/Username | Mật khẩu |
 |---|---|---|
-| Admin | admin@tbookstore.local | `Admin@123` |
-| Staff | staff@tbookstore.local | `Staff@123` |
-| Customer | customer@tbookstore.local | `Customer@123` |
+| Admin | admin@tbookstore.vn | `Admin@123` |
+| Staff | staff@tbookstore.vn | `Staff@123` |
+| Customer | customer@tbookstore.vn | `Customer@123` |
+
+> Dùng đuôi `.vn` (không phải `.local`/`.test`) vì thư viện validate email (`pydantic[email]`) coi các TLD đặc biệt đó là special-use domain và từ chối ngay khi validate request.
 
 ## 8. Kiểm thử
 
 ```bash
 cd backend
-dotnet test /p:CollectCoverage=true
+pip install -r requirements.txt
+pytest --cov=app --cov-report=term-missing
 ```
 
 Mục tiêu coverage: 30–40%, ưu tiên luồng đặt hàng và thanh toán.
@@ -134,14 +147,14 @@ Dự án triển khai trong 4 sprint (1 tuần/sprint), làm cá nhân:
 
 | Sprint | Nội dung chính |
 |---|---|
-| Sprint 1 | Nền tảng: setup .NET 8 + Dapper, JWT, RBAC, CRUD danh mục, Swagger, Docker khung |
+| Sprint 1 | Nền tảng: setup FastAPI + psycopg, JWT, RBAC, CRUD danh mục, Swagger, Docker khung |
 | Sprint 2 | Danh mục sách, quản lý nhân viên, nhập kho theo lô, audit log, cache Redis |
 | Sprint 3 | Giỏ hàng, checkout, đơn hàng & trạng thái, khuyến mãi/flash sale, đánh giá |
 | Sprint 4 | Báo cáo, xuất PDF, job nền, test, bảo mật, Docker hoàn chỉnh, tài liệu & demo |
 
 ## 11. Ghi nhận
 
-Schema và một số ý tưởng nghiệp vụ được tham khảo từ prototype cá nhân trước đó (`bookstore-management-express-address`), được viết lại toàn bộ trên stack .NET 8 + Dapper + AngularJS theo yêu cầu môn học.
+Schema và một số ý tưởng nghiệp vụ được tham khảo từ prototype cá nhân trước đó (`bookstore-management-express-address`), được viết lại toàn bộ trên stack FastAPI + PostgreSQL + AngularJS theo yêu cầu môn học.
 
 ## 12. Giấy phép
 

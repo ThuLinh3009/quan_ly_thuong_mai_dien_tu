@@ -19,7 +19,7 @@ Tham chiếu: `database/schema.sql`, `database/functions.sql`.
 4. Tồn kho quản lý ở **cấp variant** (1 variant ↔ 1 dòng `inventories`), không quản lý ở cấp product.
 5. Nhập kho theo lô (`import_lots` gắn 1 supplier) → `restock_from_import()` cộng dồn vào `inventories.quantity_on_hand`.
 6. Xóa category/product dùng soft-delete (`deleted_at`) — không xóa cứng, để không phá vỡ lịch sử đơn hàng cũ đã tham chiếu.
-7. `reorder_level`: ngưỡng cảnh báo tồn kho thấp, hiển thị dashboard Staff/Admin (Sprint 4 có thể tự động hoá gửi mail cảnh báo qua Hangfire — chưa cài trong bản hiện tại).
+7. `reorder_level`: ngưỡng cảnh báo tồn kho thấp, hiển thị dashboard Staff/Admin (Sprint 4 có thể tự động hoá gửi mail cảnh báo qua Celery — chưa cài trong bản hiện tại).
 8. `quantity_reserved` dùng để giữ chỗ trong lúc checkout — **giới hạn hiện tại**: `place_order()` trừ thẳng vào `quantity_on_hand` ngay khi đặt hàng thành công, chưa có bước "giữ giỏ hàng N phút" trước khi thanh toán xong.
 
 ## C. Giỏ hàng, đặt hàng, thanh toán

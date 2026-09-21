@@ -34,3 +34,14 @@ Thumbs.db
 # Claude local settings
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

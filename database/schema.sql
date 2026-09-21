@@ -1,6 +1,6 @@
 -- ============================================================
 -- TBookStore — PostgreSQL schema
--- 23 bang, chia 7 nhom nghiep vu. Quy uoc: id BIGINT IDENTITY,
+-- 23 bang, chia 7 nhom nghiep vu. Quy uoc: id BIGINT GENERATED ALWAYS AS IDENTITY,
 -- timestamp dung TIMESTAMPTZ, soft-delete qua cot deleted_at.
 -- ============================================================
 
