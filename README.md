@@ -124,6 +124,12 @@ Tài khoản mặc định sau khi seed (đổi mật khẩu ngay khi triển kh
 
 > Dùng đuôi `.vn` (không phải `.local`/`.test`) vì thư viện validate email (`pydantic[email]`) coi các TLD đặc biệt đó là special-use domain và từ chối ngay khi validate request.
 
+### 7.1. API versioning
+
+Toàn bộ API (trừ `/health`, `/health/db` — health check không versioning theo quy ước chung) được mount ở **`/api/v1/...`**, ví dụ `http://localhost:8000/api/v1/products`.
+
+Đường dẫn cũ không có prefix (`/products`, `/categories`...) **vẫn chạy song song**, đánh dấu `deprecated` trong Swagger (`/docs`) để biết cần chuyển sang `/api/v1/...` — không phá vỡ client/Postman đã tích hợp trước khi có versioning. Khi cần một phiên bản API mới có breaking change thật sự, thêm router mới mount ở `/api/v2/...` trong `backend/app/main.py`, giữ nguyên `/api/v1` không đổi cho client cũ.
+
 ## 8. Kiểm thử
 
 ```bash

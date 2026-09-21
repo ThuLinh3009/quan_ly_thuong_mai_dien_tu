@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TBookStore API — Sprint 1-2 (Auth, RBAC, Danh mục, Sản phẩm, Kho, Nhân sự)",
-    "description": "Collection test tay cho Sprint 1 (nền tảng: auth/JWT, RBAC, category/supplier) và Sprint 2 (products+variants, nhập kho, nhân sự, excel import, cache). Import collection này + chạy 'Login - Admin' trước, các request khác tự dùng {{access_token}} qua collection-level auth.",
+    "description": "Collection test tay cho Sprint 1 (nền tảng: auth/JWT, RBAC, category/supplier) và Sprint 2 (products+variants, nhập kho, nhân sự, excel import, cache). Import collection này + chạy 'Login - Admin' trước, các request khác tự dùng {{access_token}} qua collection-level auth. Mọi request (trừ Health) gọi qua {{api_url}} = {{base_url}}/api/v1 — đường dẫn cũ không prefix vẫn chạy song song (đánh dấu deprecated trong Swagger) để không phá vỡ tích hợp cũ.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -10,6 +10,7 @@
   },
   "variable": [
     { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "api_url", "value": "{{base_url}}/api/v1" },
     { "key": "access_token", "value": "" },
     { "key": "refresh_token", "value": "" },
     { "key": "staff_access_token", "value": "" },
@@ -36,7 +37,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/auth/register",
+            "url": "{{api_url}}/auth/register",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"customer1@tbookstore.vn\",\n  \"password\": \"Customer@123\",\n  \"full_name\": \"Khach Hang A\",\n  \"phone\": \"0911111111\"\n}"
@@ -60,7 +61,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/auth/login",
+            "url": "{{api_url}}/auth/login",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"admin@tbookstore.vn\",\n  \"password\": \"Admin@123\"\n}"
@@ -83,7 +84,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/auth/login",
+            "url": "{{api_url}}/auth/login",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"staff@tbookstore.vn\",\n  \"password\": \"Staff@123\"\n}"
@@ -107,7 +108,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/auth/refresh",
+            "url": "{{api_url}}/auth/refresh",
             "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" }
           }
         },
@@ -116,24 +117,24 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/auth/logout",
+            "url": "{{api_url}}/auth/logout",
             "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" }
           }
         },
-        { "name": "Me", "request": { "method": "GET", "url": "{{base_url}}/auth/me" } }
+        { "name": "Me", "request": { "method": "GET", "url": "{{api_url}}/auth/me" } }
       ]
     },
     {
       "name": "Categories",
       "item": [
-        { "name": "List categories", "request": { "method": "GET", "url": "{{base_url}}/categories?limit=20&offset=0" } },
-        { "name": "Get category by id", "request": { "method": "GET", "url": "{{base_url}}/categories/{{category_id}}" } },
+        { "name": "List categories", "request": { "method": "GET", "url": "{{api_url}}/categories?limit=20&offset=0" } },
+        { "name": "Get category by id", "request": { "method": "GET", "url": "{{api_url}}/categories/{{category_id}}" } },
         {
           "name": "Create category (admin)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/categories",
+            "url": "{{api_url}}/categories",
             "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ngoại văn\"\n}" }
           }
         },
@@ -142,24 +143,24 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/categories/{{category_id}}",
+            "url": "{{api_url}}/categories/{{category_id}}",
             "body": { "mode": "raw", "raw": "{\n  \"name\": \"Văn học Việt Nam\"\n}" }
           }
         },
-        { "name": "Delete category (admin, soft-delete)", "request": { "method": "DELETE", "url": "{{base_url}}/categories/{{category_id}}" } }
+        { "name": "Delete category (admin, soft-delete)", "request": { "method": "DELETE", "url": "{{api_url}}/categories/{{category_id}}" } }
       ]
     },
     {
       "name": "Suppliers",
       "item": [
-        { "name": "List suppliers (admin/staff)", "request": { "method": "GET", "url": "{{base_url}}/suppliers" } },
-        { "name": "Get supplier by id (admin/staff)", "request": { "method": "GET", "url": "{{base_url}}/suppliers/{{supplier_id}}" } },
+        { "name": "List suppliers (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/suppliers" } },
+        { "name": "Get supplier by id (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/suppliers/{{supplier_id}}" } },
         {
           "name": "Create supplier (admin)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/suppliers",
+            "url": "{{api_url}}/suppliers",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"NXB Test\",\n  \"contact_phone\": \"0900111222\",\n  \"email\": \"supplier@tbookstore.vn\"\n}"
@@ -171,19 +172,19 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/suppliers/{{supplier_id}}",
+            "url": "{{api_url}}/suppliers/{{supplier_id}}",
             "body": { "mode": "raw", "raw": "{\n  \"address\": \"123 Đường ABC\"\n}" }
           }
         },
-        { "name": "Deactivate supplier (admin)", "request": { "method": "DELETE", "url": "{{base_url}}/suppliers/{{supplier_id}}" } }
+        { "name": "Deactivate supplier (admin)", "request": { "method": "DELETE", "url": "{{api_url}}/suppliers/{{supplier_id}}" } }
       ]
     },
     {
       "name": "Products",
       "item": [
-        { "name": "List products (public)", "request": { "method": "GET", "url": "{{base_url}}/products?limit=20&offset=0&sort_by=created_at&sort_dir=desc" } },
-        { "name": "Search products by keyword", "request": { "method": "GET", "url": "{{base_url}}/products?keyword=kim" } },
-        { "name": "Get product by id (public)", "request": { "method": "GET", "url": "{{base_url}}/products/{{product_id}}" } },
+        { "name": "List products (public)", "request": { "method": "GET", "url": "{{api_url}}/products?limit=20&offset=0&sort_by=created_at&sort_dir=desc" } },
+        { "name": "Search products by keyword", "request": { "method": "GET", "url": "{{api_url}}/products?keyword=kim" } },
+        { "name": "Get product by id (public)", "request": { "method": "GET", "url": "{{api_url}}/products/{{product_id}}" } },
         {
           "name": "Create product + variant (admin/staff)",
           "event": [
@@ -205,7 +206,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/products",
+            "url": "{{api_url}}/products",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"category_id\": {{category_id}},\n  \"sku\": \"SACH-900\",\n  \"name\": \"Sách Test Postman\",\n  \"author\": \"Tac gia Demo\",\n  \"base_price\": 99000,\n  \"variants\": [\n    { \"variant_name\": \"Bìa mềm\", \"sku\": \"SACH-900-BM\", \"initial_quantity\": 30, \"reorder_level\": 5 }\n  ]\n}"
@@ -217,17 +218,17 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/products/{{product_id}}",
+            "url": "{{api_url}}/products/{{product_id}}",
             "body": { "mode": "raw", "raw": "{\n  \"base_price\": 105000\n}" }
           }
         },
-        { "name": "Delete product (admin/staff, soft-delete)", "request": { "method": "DELETE", "url": "{{base_url}}/products/{{product_id}}" } },
+        { "name": "Delete product (admin/staff, soft-delete)", "request": { "method": "DELETE", "url": "{{api_url}}/products/{{product_id}}" } },
         {
           "name": "Add variant to product (admin/staff)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/products/{{product_id}}/variants",
+            "url": "{{api_url}}/products/{{product_id}}/variants",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"variant_name\": \"Bìa cứng\",\n  \"sku\": \"SACH-900-BC\",\n  \"price_adjustment\": 25000,\n  \"initial_quantity\": 15,\n  \"reorder_level\": 3\n}"
@@ -239,16 +240,16 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/products/variants/{{variant_id}}",
+            "url": "{{api_url}}/products/variants/{{variant_id}}",
             "body": { "mode": "raw", "raw": "{\n  \"reorder_level\": 8\n}" }
           }
         },
-        { "name": "Deactivate variant (admin/staff)", "request": { "method": "PATCH", "url": "{{base_url}}/products/variants/{{variant_id}}/deactivate" } },
+        { "name": "Deactivate variant (admin/staff)", "request": { "method": "PATCH", "url": "{{api_url}}/products/variants/{{variant_id}}/deactivate" } },
         {
           "name": "Import products from Excel (admin/staff)",
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/products/import-excel",
+            "url": "{{api_url}}/products/import-excel",
             "body": {
               "mode": "formdata",
               "formdata": [{ "key": "file", "type": "file", "src": [] }]
@@ -260,8 +261,8 @@
     {
       "name": "Employees (Staff management - admin only)",
       "item": [
-        { "name": "List staff", "request": { "method": "GET", "url": "{{base_url}}/employees" } },
-        { "name": "Get staff by id", "request": { "method": "GET", "url": "{{base_url}}/employees/{{staff_id}}" } },
+        { "name": "List staff", "request": { "method": "GET", "url": "{{api_url}}/employees" } },
+        { "name": "Get staff by id", "request": { "method": "GET", "url": "{{api_url}}/employees/{{staff_id}}" } },
         {
           "name": "Create staff",
           "event": [
@@ -279,7 +280,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/employees",
+            "url": "{{api_url}}/employees",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"staff2@tbookstore.vn\",\n  \"password\": \"Staff@123\",\n  \"full_name\": \"Nhan vien Hai\"\n}"
@@ -291,20 +292,20 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/employees/{{staff_id}}",
+            "url": "{{api_url}}/employees/{{staff_id}}",
             "body": { "mode": "raw", "raw": "{\n  \"phone\": \"0922222222\"\n}" }
           }
         },
-        { "name": "Lock staff", "request": { "method": "PATCH", "url": "{{base_url}}/employees/{{staff_id}}/lock" } },
-        { "name": "Unlock staff", "request": { "method": "PATCH", "url": "{{base_url}}/employees/{{staff_id}}/unlock" } },
-        { "name": "Delete staff (soft-delete)", "request": { "method": "DELETE", "url": "{{base_url}}/employees/{{staff_id}}" } }
+        { "name": "Lock staff", "request": { "method": "PATCH", "url": "{{api_url}}/employees/{{staff_id}}/lock" } },
+        { "name": "Unlock staff", "request": { "method": "PATCH", "url": "{{api_url}}/employees/{{staff_id}}/unlock" } },
+        { "name": "Delete staff (soft-delete)", "request": { "method": "DELETE", "url": "{{api_url}}/employees/{{staff_id}}" } }
       ]
     },
     {
       "name": "Import Lots (Nhập kho)",
       "item": [
-        { "name": "List import lots (admin/staff)", "request": { "method": "GET", "url": "{{base_url}}/import-lots" } },
-        { "name": "Get import lot by id (admin/staff)", "request": { "method": "GET", "url": "{{base_url}}/import-lots/{{import_lot_id}}" } },
+        { "name": "List import lots (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/import-lots" } },
+        { "name": "Get import lot by id (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/import-lots/{{import_lot_id}}" } },
         {
           "name": "Create import lot -> restock (admin/staff)",
           "event": [
@@ -322,7 +323,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{base_url}}/import-lots",
+            "url": "{{api_url}}/import-lots",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"supplier_id\": {{supplier_id}},\n  \"items\": [\n    { \"product_variant_id\": {{variant_id}}, \"quantity\": 50, \"unit_cost\": 40000 }\n  ]\n}"

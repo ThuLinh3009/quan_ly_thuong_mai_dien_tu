@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 
 from app.core import database
 from app.core.config import get_settings
@@ -59,10 +60,25 @@ async def log_requests(request: Request, call_next):
 
 register_exception_handlers(app)
 
+# --- API versioning ---------------------------------------------------------
+# /health không versioning (health check là hạ tầng, quy ước chung không gắn
+# theo phiên bản API — load balancer/monitoring luôn gọi 1 đường dẫn cố định).
 app.include_router(health.router)
-app.include_router(auth.router)
-app.include_router(categories.router)
-app.include_router(suppliers.router)
-app.include_router(products.router)
-app.include_router(employees.router)
-app.include_router(import_lots.router)
+
+API_V1_PREFIX = "/api/v1"
+_versioned_routers = (auth.router, categories.router, suppliers.router, products.router, employees.router, import_lots.router)
+
+
+def _legacy_operation_id(route: APIRoute) -> str:
+    # Tránh trùng operationId với route /api/v1 tương ứng khi generate OpenAPI schema
+    return f"legacy_{route.name}"
+
+
+for _router in _versioned_routers:
+    # Đường dẫn chuẩn từ giờ trở đi: /api/v1/...
+    app.include_router(_router, prefix=API_V1_PREFIX)
+    # Giữ nguyên đường dẫn cũ (không prefix) chạy song song để không phá vỡ
+    # client/Postman collection đã tích hợp trước khi có versioning. Đánh dấu
+    # deprecated=True để Swagger hiển thị rõ đây là đường cũ, nên chuyển sang
+    # /api/v1/... — khi có breaking change thật (v2) thì bỏ nhánh legacy này.
+    app.include_router(_router, deprecated=True, generate_unique_id_function=_legacy_operation_id)
