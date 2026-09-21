@@ -29,17 +29,15 @@ async def record_audit(
     old_value: dict[str, Any] | None = None,
     new_value: dict[str, Any] | None = None,
 ) -> None:
+    # Goi function record_audit() trong functions.sql (muc 19) thay vi tu INSERT.
     await conn.execute(
-        """
-        INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value)
-        VALUES (%(user_id)s, %(action)s, %(entity_type)s, %(entity_id)s, %(old_value)s, %(new_value)s)
-        """,
-        {
-            "user_id": user_id,
-            "action": action,
-            "entity_type": entity_type,
-            "entity_id": entity_id,
-            "old_value": Jsonb(old_value, dumps=_dumps) if old_value is not None else None,
-            "new_value": Jsonb(new_value, dumps=_dumps) if new_value is not None else None,
-        },
+        "SELECT record_audit(%s, %s, %s, %s, %s, %s)",
+        (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            Jsonb(old_value, dumps=_dumps) if old_value is not None else None,
+            Jsonb(new_value, dumps=_dumps) if new_value is not None else None,
+        ),
     )

@@ -47,9 +47,20 @@ async def get_supplier(conn: AsyncConnection, supplier_id: int) -> dict[str, Any
 async def update_supplier(
     conn: AsyncConnection, supplier_id: int, data: SupplierUpdate, current_user: dict[str, Any]
 ) -> dict[str, Any]:
+    """Merge field cũ + field client gửi (exclude_unset) thành giá trị cuối
+    cùng rồi mới gọi update_supplier() — hàm DB ghi đè toàn bộ, không tự
+    COALESCE theo field nào có mặt trong request."""
     old = await get_supplier(conn, supplier_id)
-    fields = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
-    updated = await supplier_repo.update(conn, supplier_id, fields) if fields else old
+    payload = data.model_dump(exclude_unset=True)
+    updated = await supplier_repo.update(
+        conn,
+        supplier_id,
+        name=payload.get("name", old["name"]),
+        contact_phone=payload.get("contact_phone", old["contact_phone"]),
+        email=payload.get("email", old["email"]),
+        address=payload.get("address", old["address"]),
+        is_active=payload.get("is_active", old["is_active"]),
+    )
     await record_audit(
         conn, user_id=current_user["id"], action="update", entity_type="supplier",
         entity_id=supplier_id, old_value=old, new_value=updated,

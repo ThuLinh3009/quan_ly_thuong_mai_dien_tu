@@ -49,8 +49,16 @@ async def get_staff(conn: AsyncConnection, staff_id: int) -> dict[str, Any]:
 async def update_staff(
     conn: AsyncConnection, staff_id: int, data: StaffUpdate, current_user: dict[str, Any]
 ) -> dict[str, Any]:
+    """update_staff() (DB) ghi đè toàn bộ giá trị — merge field cũ + field
+    client gửi (exclude_unset) thành giá trị cuối cùng trước khi gọi."""
     old = await get_staff(conn, staff_id)
-    updated = await user_repo.update_staff(conn, staff_id, full_name=data.full_name, phone=data.phone)
+    payload = data.model_dump(exclude_unset=True)
+    updated = await user_repo.update_staff(
+        conn,
+        staff_id,
+        full_name=payload.get("full_name", old["full_name"]),
+        phone=payload.get("phone", old["phone"]),
+    )
     if updated is None:
         raise NotFoundError(f"Không tìm thấy nhân viên id={staff_id}")
     await record_audit(

@@ -15,7 +15,7 @@ from app.schemas.common import Page
 
 async def create_category(conn: AsyncConnection, data: CategoryCreate, current_user: dict[str, Any]) -> dict[str, Any]:
     slug = slugify(data.slug or data.name)
-    if await category_repo.get_by_slug(conn, slug) is not None:
+    if await category_repo.slug_exists(conn, slug):
         raise ConflictError(f"Slug '{slug}' đã tồn tại")
     if data.parent_id is not None and await category_repo.get_by_id(conn, data.parent_id) is None:
         raise NotFoundError(f"Không tìm thấy category cha id={data.parent_id}")
@@ -69,30 +69,37 @@ async def get_category(conn: AsyncConnection, category_id: int) -> dict[str, Any
 async def update_category(
     conn: AsyncConnection, category_id: int, data: CategoryUpdate, current_user: dict[str, Any]
 ) -> dict[str, Any]:
+    """Hàm DB update_category() ghi đè toàn bộ giá trị (không tự COALESCE theo
+    field nào được gửi) — nên ở đây merge field cũ + field client gửi (chỉ
+    field có mặt trong request, dùng exclude_unset) thành giá trị cuối cùng
+    rồi mới gọi repository."""
     old = await get_category(conn, category_id)
+    payload = data.model_dump(exclude_unset=True)
 
-    fields: dict[str, Any] = {}
-    if data.name is not None:
-        fields["name"] = data.name
-    if data.slug is not None:
-        fields["slug"] = slugify(data.slug)
-    elif data.name is not None:
-        fields["slug"] = slugify(data.name)
-    if data.parent_id is not None:
-        if data.parent_id == category_id:
+    new_parent_id = old["parent_id"]
+    if "parent_id" in payload:
+        new_parent_id = payload["parent_id"]
+        if new_parent_id == category_id:
             raise ConflictError("Category không thể là cha của chính nó")
-        if await category_repo.get_by_id(conn, data.parent_id) is None:
-            raise NotFoundError(f"Không tìm thấy category cha id={data.parent_id}")
-        fields["parent_id"] = data.parent_id
-    if data.is_active is not None:
-        fields["is_active"] = data.is_active
+        if new_parent_id is not None and await category_repo.get_by_id(conn, new_parent_id) is None:
+            raise NotFoundError(f"Không tìm thấy category cha id={new_parent_id}")
 
-    if "slug" in fields and fields["slug"] != old["slug"]:
-        existing = await category_repo.get_by_slug(conn, fields["slug"])
-        if existing is not None and existing["id"] != category_id:
-            raise ConflictError(f"Slug '{fields['slug']}' đã tồn tại")
+    if "slug" in payload:
+        new_slug = slugify(payload["slug"])
+    elif "name" in payload:
+        new_slug = slugify(payload["name"])
+    else:
+        new_slug = old["slug"]
 
-    updated = await category_repo.update(conn, category_id, fields)
+    new_name = payload.get("name", old["name"])
+    new_is_active = payload.get("is_active", old["is_active"])
+
+    if new_slug != old["slug"] and await category_repo.slug_exists(conn, new_slug, exclude_id=category_id):
+        raise ConflictError(f"Slug '{new_slug}' đã tồn tại")
+
+    updated = await category_repo.update(
+        conn, category_id, name=new_name, slug=new_slug, parent_id=new_parent_id, is_active=new_is_active
+    )
     assert updated is not None
     await record_audit(
         conn,

@@ -37,7 +37,7 @@ Dự án kế thừa schema và ý tưởng nghiệp vụ từ một prototype t
 |---|---|
 | Backend API | FastAPI (Python 3.12) chạy trên Uvicorn |
 | Validation / DTO | Pydantic v2 |
-| Data access | psycopg 3 (SQL thuần, gọi function PostgreSQL) |
+| Data access | psycopg 3 — **không viết SQL trong Python**, mọi đọc/ghi đều gọi function PostgreSQL định nghĩa sẵn trong `database/functions.sql` (xem mục 5.1) |
 | Cơ sở dữ liệu | PostgreSQL |
 | Frontend | AngularJS (SPA, gọi API qua JWT) |
 | Cache | Redis |
@@ -73,7 +73,7 @@ TBookStore/
 ├── database/
 │   ├── schema.sql                 # Script tạo bảng (PostgreSQL)
 │   ├── migrations/                # Thay đổi bảng đánh số (001_*.sql...), chạy 1 lần mỗi file
-│   ├── functions.sql              # 12 function nghiệp vụ (PostgreSQL), chạy lại mỗi lần migrate
+│   ├── functions.sql              # 52 function (PostgreSQL), chạy lại mỗi lần migrate — xem mục 5.1
 │   └── seed.sql                   # Dữ liệu mẫu (≥ 2.000 bản ghi)
 ├── docs/
 │   ├── SRS.md
@@ -83,6 +83,41 @@ TBookStore/
 ├── .env.example
 └── README.md
 ```
+
+### 5.1. Quy ước truy cập dữ liệu — mọi đọc/ghi đều qua function PostgreSQL
+
+`backend/app/repositories/*.py` **không được viết câu SQL trực tiếp** (không
+`INSERT/UPDATE/SELECT ... FROM <table>` trong Python) — mỗi hàm repository chỉ
+gọi 1 function tương ứng trong `database/functions.sql`, ví dụ:
+
+```python
+# backend/app/repositories/category_repo.py
+async def create(conn, *, name, slug, parent_id, is_active):
+    cur = await conn.execute(
+        "SELECT * FROM create_category(%s, %s, %s, %s)", (name, slug, parent_id, is_active)
+    )
+    ...
+```
+
+Lý do: toàn bộ logic đọc/ghi nằm tập trung ở 1 chỗ (`functions.sql`) — sửa
+nghiệp vụ chỉ sửa 1 file, không phải lục từng file Python; đồng thời có thể
+gọi lại các function này từ nơi khác (script, tool khác) ngoài FastAPI mà vẫn
+đảm bảo đúng logic.
+
+Quy tắc khi thêm tính năng mới (Sprint 3/4 trở đi):
+- **CRUD đơn giản** (insert/update/select 1-2 bảng, không cần khóa transaction
+  phức tạp): viết 1 function SQL/PLpgSQL tương ứng trong `functions.sql`,
+  service gọi qua repository như trên.
+- **Nghiệp vụ nhiều bảng/nhiều bước cần atomic** (đặt hàng, thanh toán, trừ
+  tồn kho...): bắt buộc viết PLpgSQL function xử lý trọn vẹn trong 1
+  transaction (xem ví dụ `place_order()`, `restock_from_import()`).
+- Hàm `UPDATE` không tự "chỉ sửa field được gửi" bằng SQL động — nhận đủ giá
+  trị cuối cùng. Việc merge "field cũ + field client gửi (`exclude_unset`)"
+  làm ở tầng **service** (Python), trước khi gọi repository — xem
+  `category_service.update_category()` làm ví dụ mẫu.
+- Function đổi kiểu trả về (thêm/bớt cột) phải `DROP FUNCTION IF EXISTS` trước
+  `CREATE OR REPLACE` cùng chữ ký cũ (Postgres không cho đổi return type khi
+  `CREATE OR REPLACE`).
 
 ## 6. Yêu cầu hệ thống
 

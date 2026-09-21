@@ -135,30 +135,39 @@ async def get_product(
 async def update_product(
     conn: AsyncConnection, product_id: int, data: ProductUpdate, current_user: dict[str, Any]
 ) -> dict[str, Any]:
+    """update_product() (DB) ghi đè toàn bộ giá trị — merge field cũ + field
+    client gửi (exclude_unset) thành giá trị cuối cùng trước khi gọi."""
     old = await get_product(conn, product_id, current_user)
-
-    fields: dict[str, Any] = {}
     payload = data.model_dump(exclude_unset=True)
 
-    if "category_id" in payload:
-        if await category_repo.get_by_id(conn, payload["category_id"]) is None:
-            raise NotFoundError(f"Không tìm thấy category id={payload['category_id']}")
-        fields["category_id"] = payload["category_id"]
+    new_category_id = payload.get("category_id", old["category_id"])
+    if "category_id" in payload and await category_repo.get_by_id(conn, new_category_id) is None:
+        raise NotFoundError(f"Không tìm thấy category id={new_category_id}")
 
     if "slug" in payload:
         new_slug = slugify(payload["slug"])
-        fields["slug"] = new_slug
     elif "name" in payload:
-        fields["slug"] = slugify(payload["name"])
+        new_slug = slugify(payload["name"])
+    else:
+        new_slug = old["slug"]
 
-    if "slug" in fields and fields["slug"] != old["slug"] and await product_repo.slug_exists(conn, fields["slug"]):
-        raise ConflictError(f"Slug '{fields['slug']}' đã tồn tại")
+    if new_slug != old["slug"] and await product_repo.slug_exists(conn, new_slug):
+        raise ConflictError(f"Slug '{new_slug}' đã tồn tại")
 
-    for field in ("name", "author", "publisher", "isbn", "description", "cover_image_url", "base_price", "is_active"):
-        if field in payload:
-            fields[field] = payload[field]
+    merged = {
+        "category_id": new_category_id,
+        "slug": new_slug,
+        "name": payload.get("name", old["name"]),
+        "author": payload.get("author", old["author"]),
+        "publisher": payload.get("publisher", old["publisher"]),
+        "isbn": payload.get("isbn", old["isbn"]),
+        "description": payload.get("description", old["description"]),
+        "cover_image_url": payload.get("cover_image_url", old["cover_image_url"]),
+        "base_price": payload.get("base_price", old["base_price"]),
+        "is_active": payload.get("is_active", old["is_active"]),
+    }
 
-    updated_ok = await product_repo.update(conn, product_id, fields)
+    updated_ok = await product_repo.update(conn, product_id, **merged)
     if not updated_ok:
         raise NotFoundError(f"Không tìm thấy sản phẩm id={product_id}")
 
@@ -206,15 +215,20 @@ async def add_variant(
 async def update_variant(
     conn: AsyncConnection, variant_id: int, data: VariantUpdate, current_user: dict[str, Any]
 ) -> dict[str, Any]:
+    """update_variant() (DB) ghi đè toàn bộ giá trị — merge field cũ + field
+    client gửi (exclude_unset) thành giá trị cuối cùng trước khi gọi."""
     old = await variant_repo.get_by_id(conn, variant_id)
     if old is None:
         raise NotFoundError(f"Không tìm thấy biến thể id={variant_id}")
 
     payload = data.model_dump(exclude_unset=True, exclude={"reorder_level"})
-    if payload:
-        updated = await variant_repo.update(conn, variant_id, payload)
-    else:
-        updated = old
+    updated = await variant_repo.update(
+        conn,
+        variant_id,
+        variant_name=payload.get("variant_name", old["variant_name"]),
+        price_adjustment=payload.get("price_adjustment", old["price_adjustment"]),
+        is_active=payload.get("is_active", old["is_active"]),
+    )
 
     if data.reorder_level is not None:
         await inventory_repo.update_reorder_level(conn, variant_id, data.reorder_level)

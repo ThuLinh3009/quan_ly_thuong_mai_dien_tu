@@ -1,26 +1,19 @@
-"""Truy vấn bảng users. Mọi hàm nhận sẵn 1 connection (transaction do FastAPI dependency quản lý)."""
+"""Repository cho users (Admin/Staff/Customer dùng chung bảng) — gọi function
+DB trong database/functions.sql (mục 16). Không viết SQL trực tiếp ở đây."""
 from __future__ import annotations
 
 from typing import Any
 
 from psycopg import AsyncConnection
 
-USER_COLUMNS = "id, email, password_hash, full_name, phone, role, is_active, created_at, updated_at"
-
 
 async def get_by_email(conn: AsyncConnection, email: str) -> dict[str, Any] | None:
-    cur = await conn.execute(
-        f"SELECT {USER_COLUMNS} FROM users WHERE email = %s AND deleted_at IS NULL",
-        (email,),
-    )
+    cur = await conn.execute("SELECT * FROM get_user_by_email(%s)", (email,))
     return await cur.fetchone()
 
 
 async def get_by_id(conn: AsyncConnection, user_id: int) -> dict[str, Any] | None:
-    cur = await conn.execute(
-        f"SELECT {USER_COLUMNS} FROM users WHERE id = %s AND deleted_at IS NULL",
-        (user_id,),
-    )
+    cur = await conn.execute("SELECT * FROM get_user_by_id(%s)", (user_id,))
     return await cur.fetchone()
 
 
@@ -34,11 +27,7 @@ async def create_user(
     role: str = "customer",
 ) -> dict[str, Any]:
     cur = await conn.execute(
-        f"""
-        INSERT INTO users (email, password_hash, full_name, phone, role)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING {USER_COLUMNS}
-        """,
+        "SELECT * FROM create_user(%s, %s, %s, %s, %s)",
         (email, password_hash, full_name, phone, role),
     )
     row = await cur.fetchone()
@@ -54,26 +43,8 @@ async def list_staff(
     limit: int,
     offset: int,
 ) -> tuple[list[dict[str, Any]], int]:
-    conditions = ["deleted_at IS NULL", "role = 'staff'"]
-    params: dict[str, Any] = {"limit": limit, "offset": offset}
-
-    if keyword:
-        conditions.append("(full_name ILIKE %(keyword)s OR email ILIKE %(keyword)s)")
-        params["keyword"] = f"%{keyword}%"
-    if is_active is not None:
-        conditions.append("is_active = %(is_active)s")
-        params["is_active"] = is_active
-
-    where_clause = " AND ".join(conditions)
     cur = await conn.execute(
-        f"""
-        SELECT {USER_COLUMNS}, COUNT(*) OVER() AS total_count
-        FROM users
-        WHERE {where_clause}
-        ORDER BY created_at DESC
-        LIMIT %(limit)s OFFSET %(offset)s
-        """,
-        params,
+        "SELECT * FROM list_staff(%s, %s, %s, %s)", (keyword, is_active, limit, offset)
     )
     rows = await cur.fetchall()
     total = rows[0]["total_count"] if rows else 0
@@ -81,42 +52,19 @@ async def list_staff(
 
 
 async def update_staff(
-    conn: AsyncConnection,
-    user_id: int,
-    *,
-    full_name: str | None,
-    phone: str | None,
+    conn: AsyncConnection, user_id: int, *, full_name: str, phone: str | None
 ) -> dict[str, Any] | None:
-    cur = await conn.execute(
-        f"""
-        UPDATE users
-        SET full_name = COALESCE(%(full_name)s, full_name),
-            phone = COALESCE(%(phone)s, phone)
-        WHERE id = %(id)s AND deleted_at IS NULL AND role = 'staff'
-        RETURNING {USER_COLUMNS}
-        """,
-        {"id": user_id, "full_name": full_name, "phone": phone},
-    )
+    """Nhận đủ giá trị cuối cùng (đã merge với dữ liệu cũ ở service)."""
+    cur = await conn.execute("SELECT * FROM update_staff(%s, %s, %s)", (user_id, full_name, phone))
     return await cur.fetchone()
 
 
 async def set_staff_active(conn: AsyncConnection, user_id: int, is_active: bool) -> dict[str, Any] | None:
-    cur = await conn.execute(
-        f"""
-        UPDATE users
-        SET is_active = %s
-        WHERE id = %s AND deleted_at IS NULL AND role = 'staff'
-        RETURNING {USER_COLUMNS}
-        """,
-        (is_active, user_id),
-    )
+    cur = await conn.execute("SELECT * FROM set_staff_active(%s, %s)", (user_id, is_active))
     return await cur.fetchone()
 
 
 async def soft_delete_staff(conn: AsyncConnection, user_id: int) -> bool:
-    cur = await conn.execute(
-        "UPDATE users SET deleted_at = now(), is_active = FALSE "
-        "WHERE id = %s AND deleted_at IS NULL AND role = 'staff'",
-        (user_id,),
-    )
-    return cur.rowcount > 0
+    cur = await conn.execute("SELECT soft_delete_staff(%s) AS deleted", (user_id,))
+    row = await cur.fetchone()
+    return bool(row["deleted"])
