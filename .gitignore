@@ -45,3 +45,6 @@ venv/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+
+# Application logs
+backend/logs/

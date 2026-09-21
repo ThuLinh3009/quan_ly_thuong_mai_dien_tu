@@ -13,6 +13,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/app:/code/app
+      - ./backend/logs:/code/logs
       - ./database:/database:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
