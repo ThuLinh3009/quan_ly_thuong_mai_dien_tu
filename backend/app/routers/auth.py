@@ -5,6 +5,7 @@ from psycopg import AsyncConnection
 
 from app.core.database import get_conn
 from app.core.deps import get_current_user
+from app.core.ratelimit import login_rate_limit
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserOut
 from app.services import auth_service
 
@@ -16,7 +17,7 @@ async def register(data: RegisterRequest, conn: AsyncConnection = Depends(get_co
     return await auth_service.register(conn, data)
 
 
-@router.post("/login", response_model=TokenPair)
+@router.post("/login", response_model=TokenPair, dependencies=[Depends(login_rate_limit)])
 async def login(data: LoginRequest, conn: AsyncConnection = Depends(get_conn)):
     return await auth_service.login(conn, data)
 

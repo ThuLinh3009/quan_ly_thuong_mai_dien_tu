@@ -138,169 +138,16 @@ RETURNS NUMERIC AS $$
 $$ LANGUAGE sql STABLE;
 
 -- ------------------------------------------------------------
--- 4. add_to_cart — them/cong don sach vao gio hang cua khach
+-- 4. add_to_cart — them/cong don sach vao gio hang cua khach. Ban day du
+-- (dung gia flash sale qua get_effective_unit_price()) nam o muc 20 phia
+-- duoi, khong dinh nghia lai o day de tranh code trung/gay nham lan.
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION add_to_cart(
-    p_user_id    BIGINT,
-    p_variant_id BIGINT,
-    p_quantity   INT
-) RETURNS BIGINT AS $$
-DECLARE
-    v_cart_id BIGINT;
-    v_price   NUMERIC;
-    v_item_id BIGINT;
-BEGIN
-    IF p_quantity <= 0 THEN
-        RAISE EXCEPTION 'Quantity must be positive';
-    END IF;
-
-    INSERT INTO carts (user_id) VALUES (p_user_id)
-    ON CONFLICT (user_id) DO UPDATE SET updated_at = now()
-    RETURNING id INTO v_cart_id;
-
-    SELECT p.base_price + pv.price_adjustment INTO v_price
-    FROM product_variants pv
-    JOIN products p ON p.id = pv.product_id
-    WHERE pv.id = p_variant_id AND pv.is_active = TRUE;
-
-    IF v_price IS NULL THEN
-        RAISE EXCEPTION 'Product variant % not found or inactive', p_variant_id;
-    END IF;
-
-    INSERT INTO cart_items (cart_id, product_variant_id, quantity, unit_price_snapshot)
-    VALUES (v_cart_id, p_variant_id, p_quantity, v_price)
-    ON CONFLICT (cart_id, product_variant_id)
-    DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity,
-                  unit_price_snapshot = EXCLUDED.unit_price_snapshot
-    RETURNING id INTO v_item_id;
-
-    RETURN v_item_id;
-END;
-$$ LANGUAGE plpgsql;
 
 -- ------------------------------------------------------------
--- 5. place_order — checkout: kiem tra ton kho, ap voucher, tao don,
---    tru ton kho, xoa gio hang. Chay trong 1 transaction (psycopg goi ham trong 1 transaction).
+-- 5. place_order — checkout. Ban day du (kiem tra dia chi thuoc user, cong
+-- quantity_sold cho flash sale) nam o muc 23 phia duoi, khong dinh nghia lai
+-- o day de tranh code trung/gay nham lan.
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION place_order(
-    p_user_id          BIGINT,
-    p_address_id       BIGINT,
-    p_payment_method   payment_method,
-    p_promotion_code   VARCHAR DEFAULT NULL
-) RETURNS BIGINT AS $$
-DECLARE
-    v_cart_id      BIGINT;
-    v_subtotal     NUMERIC := 0;
-    v_discount     NUMERIC := 0;
-    v_shipping_fee NUMERIC := 30000;
-    v_total        NUMERIC;
-    v_order_id     BIGINT;
-    v_promotion    promotions%ROWTYPE;
-    v_item         RECORD;
-    v_available    INT;
-BEGIN
-    SELECT id INTO v_cart_id FROM carts WHERE user_id = p_user_id;
-    IF v_cart_id IS NULL THEN
-        RAISE EXCEPTION 'Cart not found for user %', p_user_id;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM cart_items WHERE cart_id = v_cart_id) THEN
-        RAISE EXCEPTION 'Cart is empty';
-    END IF;
-
-    -- Khoa va kiem tra ton kho truoc khi tru tien
-    FOR v_item IN
-        SELECT ci.product_variant_id, ci.quantity
-        FROM cart_items ci
-        WHERE ci.cart_id = v_cart_id
-    LOOP
-        SELECT (quantity_on_hand - quantity_reserved) INTO v_available
-        FROM inventories
-        WHERE product_variant_id = v_item.product_variant_id
-        FOR UPDATE;
-
-        IF v_available IS NULL OR v_available < v_item.quantity THEN
-            RAISE EXCEPTION 'Insufficient stock for variant %', v_item.product_variant_id;
-        END IF;
-    END LOOP;
-
-    SELECT get_cart_total(v_cart_id) INTO v_subtotal;
-
-    IF p_promotion_code IS NOT NULL THEN
-        SELECT * INTO v_promotion FROM promotions
-        WHERE code = p_promotion_code
-          AND is_active = TRUE
-          AND now() BETWEEN starts_at AND ends_at;
-
-        IF v_promotion.id IS NULL THEN
-            RAISE EXCEPTION 'Promotion code % invalid or expired', p_promotion_code;
-        END IF;
-
-        IF v_subtotal < v_promotion.min_order_amount THEN
-            RAISE EXCEPTION 'Order does not meet minimum amount for promotion %', p_promotion_code;
-        END IF;
-
-        IF v_promotion.per_user_limit IS NOT NULL AND
-           (SELECT COUNT(*) FROM promotion_usages WHERE promotion_id = v_promotion.id AND user_id = p_user_id) >= v_promotion.per_user_limit THEN
-            RAISE EXCEPTION 'Promotion % usage limit reached for this user', p_promotion_code;
-        END IF;
-
-        v_discount := CASE v_promotion.type
-            WHEN 'percentage' THEN v_subtotal * v_promotion.value / 100
-            ELSE v_promotion.value
-        END;
-
-        IF v_promotion.max_discount_amount IS NOT NULL THEN
-            v_discount := LEAST(v_discount, v_promotion.max_discount_amount);
-        END IF;
-    END IF;
-
-    v_total := v_subtotal - v_discount + v_shipping_fee;
-
-    INSERT INTO orders (order_code, user_id, address_id, status, subtotal, discount_amount, shipping_fee, total_amount)
-    VALUES (
-        'ORD-' || to_char(now(), 'YYYYMMDDHH24MISS') || '-' || p_user_id,
-        p_user_id, p_address_id, 'pending', v_subtotal, v_discount, v_shipping_fee, v_total
-    )
-    RETURNING id INTO v_order_id;
-
-    INSERT INTO order_items (order_id, product_variant_id, product_name_snapshot, sku_snapshot, quantity, unit_price, discount_amount, line_total)
-    SELECT
-        v_order_id,
-        ci.product_variant_id,
-        p.name || ' (' || pv.variant_name || ')',
-        pv.sku,
-        ci.quantity,
-        ci.unit_price_snapshot,
-        0,
-        ci.quantity * ci.unit_price_snapshot
-    FROM cart_items ci
-    JOIN product_variants pv ON pv.id = ci.product_variant_id
-    JOIN products p ON p.id = pv.product_id
-    WHERE ci.cart_id = v_cart_id;
-
-    UPDATE inventories inv
-    SET quantity_on_hand = inv.quantity_on_hand - ci.quantity,
-        updated_at = now()
-    FROM cart_items ci
-    WHERE ci.cart_id = v_cart_id AND inv.product_variant_id = ci.product_variant_id;
-
-    INSERT INTO order_status_history (order_id, from_status, to_status, changed_by, note)
-    VALUES (v_order_id, NULL, 'pending', p_user_id, 'Don hang duoc tao');
-
-    INSERT INTO payments (order_id, method, status, amount)
-    VALUES (v_order_id, p_payment_method, 'pending', v_total);
-
-    IF p_promotion_code IS NOT NULL THEN
-        INSERT INTO promotion_usages (promotion_id, user_id, order_id)
-        VALUES (v_promotion.id, p_user_id, v_order_id);
-    END IF;
-
-    DELETE FROM cart_items WHERE cart_id = v_cart_id;
-
-    RETURN v_order_id;
-END;
-$$ LANGUAGE plpgsql;
 
 -- ------------------------------------------------------------
 -- 6. update_order_status — chuyen trang thai don hang dung quy tac,
@@ -348,43 +195,11 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ------------------------------------------------------------
--- 7. get_order_detail — chi tiet don hang de hien thi/tra API
+-- 7. get_order_detail — chi tiet don hang de hien thi/tra API. Ban day du
+-- (them user_id/address, dung DROP guard) nam o muc 24 phia duoi vi Sprint 3
+-- doi return type; khong dinh nghia lai o day de tranh 2 CREATE OR REPLACE
+-- xung dot return type voi nhau tren nhung lan chay lai functions.sql sau.
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION get_order_detail(p_order_id BIGINT)
-RETURNS TABLE (
-    id              BIGINT,
-    order_code      VARCHAR,
-    status          order_status,
-    subtotal        NUMERIC,
-    discount_amount NUMERIC,
-    shipping_fee    NUMERIC,
-    total_amount    NUMERIC,
-    created_at      TIMESTAMPTZ,
-    items           JSON,
-    payment         JSON,
-    status_history  JSON
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT
-        o.id, o.order_code, o.status, o.subtotal, o.discount_amount, o.shipping_fee, o.total_amount, o.created_at,
-        (SELECT json_agg(json_build_object(
-            'product_name', oi.product_name_snapshot,
-            'sku', oi.sku_snapshot,
-            'quantity', oi.quantity,
-            'unit_price', oi.unit_price,
-            'line_total', oi.line_total
-         )) FROM order_items oi WHERE oi.order_id = o.id),
-        (SELECT json_build_object('method', pm.method, 'status', pm.status, 'amount', pm.amount, 'paid_at', pm.paid_at)
-         FROM payments pm WHERE pm.order_id = o.id),
-        (SELECT json_agg(json_build_object(
-            'from_status', h.from_status, 'to_status', h.to_status, 'note', h.note, 'created_at', h.created_at
-         ) ORDER BY h.created_at)
-         FROM order_status_history h WHERE h.order_id = o.id)
-    FROM orders o
-    WHERE o.id = p_order_id;
-END;
-$$ LANGUAGE plpgsql STABLE;
 
 -- ------------------------------------------------------------
 -- 8. get_top_selling_books — top sach ban chay trong khoang thoi gian
@@ -1027,3 +842,911 @@ CREATE OR REPLACE FUNCTION record_audit(
     INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value)
     VALUES (p_user_id, p_action, p_entity_type, p_entity_id, p_old_value, p_new_value);
 $$ LANGUAGE sql;
+
+-- ============================================================
+-- Sprint 3 (Tuan 3) — Ban hang online: gio hang, checkout, don hang,
+-- khuyen mai (voucher/flash sale), tra hang/hoan tien, danh gia san pham.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 20. Gia hieu luc cua 1 bien the — uu tien gia flash sale neu dang
+-- chay va con suat ban, ngược lai la base_price + price_adjustment.
+-- Dung chung cho add_to_cart() va API xem gia hien tai.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION get_effective_unit_price(p_variant_id BIGINT)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_price       NUMERIC;
+    v_flash_price NUMERIC;
+BEGIN
+    SELECT p.base_price + pv.price_adjustment INTO v_price
+    FROM product_variants pv
+    JOIN products p ON p.id = pv.product_id
+    WHERE pv.id = p_variant_id AND pv.is_active = TRUE AND p.deleted_at IS NULL;
+
+    IF v_price IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT fsi.flash_price INTO v_flash_price
+    FROM flash_sale_items fsi
+    JOIN promotions promo ON promo.id = fsi.promotion_id
+    WHERE fsi.product_variant_id = p_variant_id
+      AND promo.is_active = TRUE
+      AND promo.type = 'flash_sale'
+      AND now() BETWEEN promo.starts_at AND promo.ends_at
+      AND fsi.quantity_sold < fsi.quantity_limit
+    ORDER BY fsi.flash_price ASC
+    LIMIT 1;
+
+    RETURN COALESCE(v_flash_price, v_price);
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- add_to_cart() cap nhat: dung gia hieu luc (co flash sale) thay vi tinh
+-- thang base_price + price_adjustment nhu ban dau.
+CREATE OR REPLACE FUNCTION add_to_cart(
+    p_user_id    BIGINT,
+    p_variant_id BIGINT,
+    p_quantity   INT
+) RETURNS BIGINT AS $$
+DECLARE
+    v_cart_id BIGINT;
+    v_price   NUMERIC;
+    v_item_id BIGINT;
+BEGIN
+    IF p_quantity <= 0 THEN
+        RAISE EXCEPTION 'Quantity must be positive';
+    END IF;
+
+    v_price := get_effective_unit_price(p_variant_id);
+    IF v_price IS NULL THEN
+        RAISE EXCEPTION 'Product variant % not found or inactive', p_variant_id;
+    END IF;
+
+    INSERT INTO carts (user_id) VALUES (p_user_id)
+    ON CONFLICT (user_id) DO UPDATE SET updated_at = now()
+    RETURNING id INTO v_cart_id;
+
+    INSERT INTO cart_items (cart_id, product_variant_id, quantity, unit_price_snapshot)
+    VALUES (v_cart_id, p_variant_id, p_quantity, v_price)
+    ON CONFLICT (cart_id, product_variant_id)
+    DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity,
+                  unit_price_snapshot = EXCLUDED.unit_price_snapshot
+    RETURNING id INTO v_item_id;
+
+    RETURN v_item_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ------------------------------------------------------------
+-- 21. Xem/sua/xoa gio hang
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION get_cart(p_user_id BIGINT)
+RETURNS TABLE (cart_id BIGINT, items JSON, subtotal NUMERIC) AS $$
+DECLARE
+    v_cart_id BIGINT;
+BEGIN
+    SELECT id INTO v_cart_id FROM carts WHERE user_id = p_user_id;
+    IF v_cart_id IS NULL THEN
+        RETURN QUERY SELECT NULL::BIGINT, '[]'::json, 0::NUMERIC;
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT
+        v_cart_id,
+        COALESCE(
+            (SELECT json_agg(json_build_object(
+                'product_variant_id', ci.product_variant_id,
+                'product_id', pv.product_id,
+                'product_name', p.name,
+                'variant_name', pv.variant_name,
+                'sku', pv.sku,
+                'cover_image_url', p.cover_image_url,
+                'quantity', ci.quantity,
+                'unit_price', ci.unit_price_snapshot,
+                'line_total', ci.quantity * ci.unit_price_snapshot
+             ) ORDER BY ci.id)
+             FROM cart_items ci
+             JOIN product_variants pv ON pv.id = ci.product_variant_id
+             JOIN products p ON p.id = pv.product_id
+             WHERE ci.cart_id = v_cart_id
+            ), '[]'::json
+        ),
+        get_cart_total(v_cart_id);
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION update_cart_item_quantity(
+    p_user_id    BIGINT,
+    p_variant_id BIGINT,
+    p_quantity   INT
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_cart_id BIGINT;
+    v_count   INT;
+BEGIN
+    IF p_quantity <= 0 THEN
+        RAISE EXCEPTION 'Quantity must be positive';
+    END IF;
+
+    SELECT id INTO v_cart_id FROM carts WHERE user_id = p_user_id;
+    IF v_cart_id IS NULL THEN
+        RAISE EXCEPTION 'Cart not found for user %', p_user_id;
+    END IF;
+
+    UPDATE cart_items SET quantity = p_quantity
+    WHERE cart_id = v_cart_id AND product_variant_id = p_variant_id;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    UPDATE carts SET updated_at = now() WHERE id = v_cart_id;
+    RETURN v_count > 0;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION remove_cart_item(p_user_id BIGINT, p_variant_id BIGINT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_cart_id BIGINT;
+    v_count   INT;
+BEGIN
+    SELECT id INTO v_cart_id FROM carts WHERE user_id = p_user_id;
+    IF v_cart_id IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    DELETE FROM cart_items WHERE cart_id = v_cart_id AND product_variant_id = p_variant_id;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    UPDATE carts SET updated_at = now() WHERE id = v_cart_id;
+    RETURN v_count > 0;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION clear_cart(p_user_id BIGINT)
+RETURNS VOID AS $$
+DECLARE
+    v_cart_id BIGINT;
+BEGIN
+    SELECT id INTO v_cart_id FROM carts WHERE user_id = p_user_id;
+    IF v_cart_id IS NOT NULL THEN
+        DELETE FROM cart_items WHERE cart_id = v_cart_id;
+        UPDATE carts SET updated_at = now() WHERE id = v_cart_id;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ------------------------------------------------------------
+-- 22. Khuyen mai — logic ap dung voucher tach rieng thanh 2 ham dung
+-- chung cho place_order()/preview_checkout(), tranh lap code.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION find_valid_promotion(p_code VARCHAR, p_user_id BIGINT, p_subtotal NUMERIC)
+RETURNS promotions AS $$
+DECLARE
+    v_promotion promotions%ROWTYPE;
+BEGIN
+    SELECT * INTO v_promotion FROM promotions
+    WHERE code = p_code AND is_active = TRUE AND now() BETWEEN starts_at AND ends_at;
+
+    IF v_promotion.id IS NULL THEN
+        RAISE EXCEPTION 'Promotion code % invalid or expired', p_code;
+    END IF;
+
+    IF p_subtotal < v_promotion.min_order_amount THEN
+        RAISE EXCEPTION 'Order does not meet minimum amount for promotion %', p_code;
+    END IF;
+
+    IF v_promotion.usage_limit IS NOT NULL AND
+       (SELECT COUNT(*) FROM promotion_usages WHERE promotion_id = v_promotion.id) >= v_promotion.usage_limit THEN
+        RAISE EXCEPTION 'Promotion % usage limit reached', p_code;
+    END IF;
+
+    IF v_promotion.per_user_limit IS NOT NULL AND
+       (SELECT COUNT(*) FROM promotion_usages WHERE promotion_id = v_promotion.id AND user_id = p_user_id) >= v_promotion.per_user_limit THEN
+        RAISE EXCEPTION 'Promotion % usage limit reached for this user', p_code;
+    END IF;
+
+    RETURN v_promotion;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION calculate_discount(p_promotion promotions, p_subtotal NUMERIC)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_discount NUMERIC;
+BEGIN
+    v_discount := CASE p_promotion.type
+        WHEN 'percentage' THEN p_subtotal * p_promotion.value / 100
+        ELSE p_promotion.value
+    END;
+
+    IF p_promotion.max_discount_amount IS NOT NULL THEN
+        v_discount := LEAST(v_discount, p_promotion.max_discount_amount);
+    END IF;
+
+    RETURN LEAST(v_discount, p_subtotal);
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION promotion_code_exists(p_code VARCHAR)
+RETURNS BOOLEAN AS $$
+    SELECT EXISTS (SELECT 1 FROM promotions WHERE code = p_code);
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION create_promotion(
+    p_code                VARCHAR,
+    p_type                promotion_type,
+    p_value               NUMERIC,
+    p_min_order_amount    NUMERIC,
+    p_max_discount_amount NUMERIC,
+    p_starts_at           TIMESTAMPTZ,
+    p_ends_at             TIMESTAMPTZ,
+    p_usage_limit         INT,
+    p_per_user_limit      INT,
+    p_is_active           BOOLEAN
+) RETURNS TABLE (
+    id BIGINT, code VARCHAR, type promotion_type, value NUMERIC, min_order_amount NUMERIC,
+    max_discount_amount NUMERIC, starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ,
+    usage_limit INT, per_user_limit INT, is_active BOOLEAN
+) AS $$
+    INSERT INTO promotions (code, type, value, min_order_amount, max_discount_amount, starts_at, ends_at, usage_limit, per_user_limit, is_active)
+    VALUES (p_code, p_type, p_value, p_min_order_amount, p_max_discount_amount, p_starts_at, p_ends_at, p_usage_limit, p_per_user_limit, p_is_active)
+    RETURNING promotions.id, promotions.code, promotions.type, promotions.value, promotions.min_order_amount,
+              promotions.max_discount_amount, promotions.starts_at, promotions.ends_at,
+              promotions.usage_limit, promotions.per_user_limit, promotions.is_active;
+$$ LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION get_promotion_by_id(p_id BIGINT)
+RETURNS TABLE (
+    id BIGINT, code VARCHAR, type promotion_type, value NUMERIC, min_order_amount NUMERIC,
+    max_discount_amount NUMERIC, starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ,
+    usage_limit INT, per_user_limit INT, is_active BOOLEAN
+) AS $$
+    SELECT p.id, p.code, p.type, p.value, p.min_order_amount, p.max_discount_amount,
+           p.starts_at, p.ends_at, p.usage_limit, p.per_user_limit, p.is_active
+    FROM promotions p WHERE p.id = p_id;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION list_promotions(
+    p_type      promotion_type DEFAULT NULL,
+    p_is_active BOOLEAN DEFAULT NULL,
+    p_limit     INT DEFAULT 20,
+    p_offset    INT DEFAULT 0
+) RETURNS TABLE (
+    id BIGINT, code VARCHAR, type promotion_type, value NUMERIC, min_order_amount NUMERIC,
+    max_discount_amount NUMERIC, starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ,
+    usage_limit INT, per_user_limit INT, is_active BOOLEAN, total_count BIGINT
+) AS $$
+    SELECT p.id, p.code, p.type, p.value, p.min_order_amount, p.max_discount_amount,
+           p.starts_at, p.ends_at, p.usage_limit, p.per_user_limit, p.is_active,
+           COUNT(*) OVER() AS total_count
+    FROM promotions p
+    WHERE (p_type IS NULL OR p.type = p_type)
+      AND (p_is_active IS NULL OR p.is_active = p_is_active)
+    ORDER BY p.starts_at DESC
+    LIMIT p_limit OFFSET p_offset;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION update_promotion(
+    p_id                  BIGINT,
+    p_value               NUMERIC,
+    p_min_order_amount    NUMERIC,
+    p_max_discount_amount NUMERIC,
+    p_starts_at           TIMESTAMPTZ,
+    p_ends_at             TIMESTAMPTZ,
+    p_usage_limit         INT,
+    p_per_user_limit      INT,
+    p_is_active           BOOLEAN
+) RETURNS TABLE (
+    id BIGINT, code VARCHAR, type promotion_type, value NUMERIC, min_order_amount NUMERIC,
+    max_discount_amount NUMERIC, starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ,
+    usage_limit INT, per_user_limit INT, is_active BOOLEAN
+) AS $$
+    UPDATE promotions
+    SET value = p_value, min_order_amount = p_min_order_amount, max_discount_amount = p_max_discount_amount,
+        starts_at = p_starts_at, ends_at = p_ends_at, usage_limit = p_usage_limit,
+        per_user_limit = p_per_user_limit, is_active = p_is_active
+    WHERE promotions.id = p_id
+    RETURNING promotions.id, promotions.code, promotions.type, promotions.value, promotions.min_order_amount,
+              promotions.max_discount_amount, promotions.starts_at, promotions.ends_at,
+              promotions.usage_limit, promotions.per_user_limit, promotions.is_active;
+$$ LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION set_promotion_active(p_id BIGINT, p_is_active BOOLEAN)
+RETURNS TABLE (
+    id BIGINT, code VARCHAR, type promotion_type, value NUMERIC, min_order_amount NUMERIC,
+    max_discount_amount NUMERIC, starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ,
+    usage_limit INT, per_user_limit INT, is_active BOOLEAN
+) AS $$
+    UPDATE promotions SET is_active = p_is_active WHERE promotions.id = p_id
+    RETURNING promotions.id, promotions.code, promotions.type, promotions.value, promotions.min_order_amount,
+              promotions.max_discount_amount, promotions.starts_at, promotions.ends_at,
+              promotions.usage_limit, promotions.per_user_limit, promotions.is_active;
+$$ LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION add_flash_sale_item(
+    p_promotion_id   BIGINT,
+    p_variant_id     BIGINT,
+    p_flash_price    NUMERIC,
+    p_quantity_limit INT
+) RETURNS TABLE (
+    id BIGINT, promotion_id BIGINT, product_variant_id BIGINT, flash_price NUMERIC,
+    quantity_limit INT, quantity_sold INT
+) AS $$
+    INSERT INTO flash_sale_items (promotion_id, product_variant_id, flash_price, quantity_limit)
+    VALUES (p_promotion_id, p_variant_id, p_flash_price, p_quantity_limit)
+    ON CONFLICT (promotion_id, product_variant_id)
+    DO UPDATE SET flash_price = EXCLUDED.flash_price, quantity_limit = EXCLUDED.quantity_limit
+    RETURNING flash_sale_items.id, flash_sale_items.promotion_id, flash_sale_items.product_variant_id,
+              flash_sale_items.flash_price, flash_sale_items.quantity_limit, flash_sale_items.quantity_sold;
+$$ LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION list_flash_sale_items(p_promotion_id BIGINT)
+RETURNS TABLE (
+    id BIGINT, promotion_id BIGINT, product_variant_id BIGINT, variant_name VARCHAR,
+    product_name VARCHAR, flash_price NUMERIC, quantity_limit INT, quantity_sold INT
+) AS $$
+    SELECT fsi.id, fsi.promotion_id, fsi.product_variant_id, pv.variant_name, p.name,
+           fsi.flash_price, fsi.quantity_limit, fsi.quantity_sold
+    FROM flash_sale_items fsi
+    JOIN product_variants pv ON pv.id = fsi.product_variant_id
+    JOIN products p ON p.id = pv.product_id
+    WHERE fsi.promotion_id = p_promotion_id
+    ORDER BY fsi.id;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION get_active_flash_sales(p_limit INT DEFAULT 20)
+RETURNS TABLE (
+    promotion_id BIGINT, product_variant_id BIGINT, product_id BIGINT, product_name VARCHAR,
+    variant_name VARCHAR, base_price NUMERIC, flash_price NUMERIC,
+    quantity_limit INT, quantity_sold INT, ends_at TIMESTAMPTZ
+) AS $$
+    SELECT promo.id, fsi.product_variant_id, p.id, p.name, pv.variant_name,
+           p.base_price + pv.price_adjustment, fsi.flash_price, fsi.quantity_limit, fsi.quantity_sold, promo.ends_at
+    FROM flash_sale_items fsi
+    JOIN promotions promo ON promo.id = fsi.promotion_id
+    JOIN product_variants pv ON pv.id = fsi.product_variant_id
+    JOIN products p ON p.id = pv.product_id
+    WHERE promo.is_active = TRUE AND promo.type = 'flash_sale'
+      AND now() BETWEEN promo.starts_at AND promo.ends_at
+      AND fsi.quantity_sold < fsi.quantity_limit
+      AND p.deleted_at IS NULL
+    ORDER BY promo.ends_at ASC
+    LIMIT p_limit;
+$$ LANGUAGE sql STABLE;
+
+-- ------------------------------------------------------------
+-- 23. Checkout — place_order() viet lai de dung chung
+-- find_valid_promotion()/calculate_discount() thay vi lap logic; them
+-- kiem tra dia chi thuoc ve user va cong don quantity_sold cho flash sale
+-- (2 cho nay bi thieu o ban dau).
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION place_order(
+    p_user_id          BIGINT,
+    p_address_id       BIGINT,
+    p_payment_method   payment_method,
+    p_promotion_code   VARCHAR DEFAULT NULL
+) RETURNS BIGINT AS $$
+DECLARE
+    v_cart_id      BIGINT;
+    v_subtotal     NUMERIC := 0;
+    v_discount     NUMERIC := 0;
+    v_shipping_fee NUMERIC := 30000;
+    v_total        NUMERIC;
+    v_order_id     BIGINT;
+    v_promotion    promotions%ROWTYPE;
+    v_item         RECORD;
+    v_available    INT;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM addresses WHERE id = p_address_id AND user_id = p_user_id) THEN
+        RAISE EXCEPTION 'Address % does not belong to user %', p_address_id, p_user_id;
+    END IF;
+
+    SELECT id INTO v_cart_id FROM carts WHERE user_id = p_user_id;
+    IF v_cart_id IS NULL THEN
+        RAISE EXCEPTION 'Cart not found for user %', p_user_id;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM cart_items WHERE cart_id = v_cart_id) THEN
+        RAISE EXCEPTION 'Cart is empty';
+    END IF;
+
+    -- Khoa va kiem tra ton kho truoc khi tru tien
+    FOR v_item IN
+        SELECT ci.product_variant_id, ci.quantity
+        FROM cart_items ci
+        WHERE ci.cart_id = v_cart_id
+    LOOP
+        SELECT (quantity_on_hand - quantity_reserved) INTO v_available
+        FROM inventories
+        WHERE product_variant_id = v_item.product_variant_id
+        FOR UPDATE;
+
+        IF v_available IS NULL OR v_available < v_item.quantity THEN
+            RAISE EXCEPTION 'Insufficient stock for variant %', v_item.product_variant_id;
+        END IF;
+    END LOOP;
+
+    SELECT get_cart_total(v_cart_id) INTO v_subtotal;
+
+    IF p_promotion_code IS NOT NULL THEN
+        v_promotion := find_valid_promotion(p_promotion_code, p_user_id, v_subtotal);
+        v_discount := calculate_discount(v_promotion, v_subtotal);
+    END IF;
+
+    v_total := v_subtotal - v_discount + v_shipping_fee;
+
+    -- order_code sinh theo id (IDENTITY, luon duy nhat) thay vi timestamp giay
+    -- (bi trung khi 1 user dat >=2 don trong cung 1 giay, gap UniqueViolation
+    -- tren orders_order_code_key — phat hien khi test checkout lien tuc nhanh).
+    -- order_code cot VARCHAR(30) nen dung placeholder ngan (khong the nhet
+    -- nguyen UUID 36 ky tu), du duy nhat tam thoi la du vi UPDATE ngay ben duoi.
+    INSERT INTO orders (order_code, user_id, address_id, status, subtotal, discount_amount, shipping_fee, total_amount)
+    VALUES (
+        'TMP-' || left(gen_random_uuid()::text, 20),
+        p_user_id, p_address_id, 'pending', v_subtotal, v_discount, v_shipping_fee, v_total
+    )
+    RETURNING id INTO v_order_id;
+
+    UPDATE orders SET order_code = 'ORD-' || to_char(now(), 'YYYYMMDD') || '-' || v_order_id
+    WHERE id = v_order_id;
+
+    INSERT INTO order_items (order_id, product_variant_id, product_name_snapshot, sku_snapshot, quantity, unit_price, discount_amount, line_total)
+    SELECT
+        v_order_id,
+        ci.product_variant_id,
+        p.name || ' (' || pv.variant_name || ')',
+        pv.sku,
+        ci.quantity,
+        ci.unit_price_snapshot,
+        0,
+        ci.quantity * ci.unit_price_snapshot
+    FROM cart_items ci
+    JOIN product_variants pv ON pv.id = ci.product_variant_id
+    JOIN products p ON p.id = pv.product_id
+    WHERE ci.cart_id = v_cart_id;
+
+    UPDATE inventories inv
+    SET quantity_on_hand = inv.quantity_on_hand - ci.quantity,
+        updated_at = now()
+    FROM cart_items ci
+    WHERE ci.cart_id = v_cart_id AND inv.product_variant_id = ci.product_variant_id;
+
+    -- Cong don so luong da ban cho cac flash sale item lien quan (bi thieu o
+    -- ban goc). Luu y: khong the JOIN dong bang chinh bang dich (fsi) o menh
+    -- de FROM/JOIN cua UPDATE — Postgres khong cho tham chieu bang dich trong
+    -- ON clause, phai dua dieu kien tuong quan xuong WHERE.
+    UPDATE flash_sale_items fsi
+    SET quantity_sold = fsi.quantity_sold + ci.quantity
+    FROM cart_items ci, promotions promo
+    WHERE ci.cart_id = v_cart_id
+      AND fsi.product_variant_id = ci.product_variant_id
+      AND fsi.promotion_id = promo.id
+      AND promo.is_active = TRUE AND promo.type = 'flash_sale'
+      AND now() BETWEEN promo.starts_at AND promo.ends_at;
+
+    INSERT INTO order_status_history (order_id, from_status, to_status, changed_by, note)
+    VALUES (v_order_id, NULL, 'pending', p_user_id, 'Don hang duoc tao');
+
+    INSERT INTO payments (order_id, method, status, amount)
+    VALUES (v_order_id, p_payment_method, 'pending', v_total);
+
+    IF p_promotion_code IS NOT NULL THEN
+        INSERT INTO promotion_usages (promotion_id, user_id, order_id)
+        VALUES (v_promotion.id, p_user_id, v_order_id);
+    END IF;
+
+    DELETE FROM cart_items WHERE cart_id = v_cart_id;
+
+    RETURN v_order_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION preview_checkout(p_user_id BIGINT, p_promotion_code VARCHAR DEFAULT NULL)
+RETURNS TABLE (
+    subtotal        NUMERIC,
+    discount_amount NUMERIC,
+    shipping_fee    NUMERIC,
+    total_amount    NUMERIC
+) AS $$
+DECLARE
+    v_cart_id      BIGINT;
+    v_subtotal     NUMERIC := 0;
+    v_discount     NUMERIC := 0;
+    v_shipping_fee NUMERIC := 30000;
+    v_promotion    promotions%ROWTYPE;
+BEGIN
+    SELECT id INTO v_cart_id FROM carts WHERE user_id = p_user_id;
+    IF v_cart_id IS NULL OR NOT EXISTS (SELECT 1 FROM cart_items WHERE cart_id = v_cart_id) THEN
+        RAISE EXCEPTION 'Cart is empty';
+    END IF;
+
+    SELECT get_cart_total(v_cart_id) INTO v_subtotal;
+
+    IF p_promotion_code IS NOT NULL THEN
+        v_promotion := find_valid_promotion(p_promotion_code, p_user_id, v_subtotal);
+        v_discount := calculate_discount(v_promotion, v_subtotal);
+    END IF;
+
+    RETURN QUERY SELECT v_subtotal, v_discount, v_shipping_fee, v_subtotal - v_discount + v_shipping_fee;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- ------------------------------------------------------------
+-- 24. Don hang — liet ke theo khach hang / theo quan tri, gia lap
+-- payment gateway callback, xem chu so huu.
+-- get_order_detail() doi return type (them user_id/address) nen phai DROP
+-- truoc khi CREATE OR REPLACE (Postgres khong cho doi return type function
+-- co san).
+-- ------------------------------------------------------------
+DROP FUNCTION IF EXISTS get_order_detail(BIGINT);
+CREATE OR REPLACE FUNCTION get_order_detail(p_order_id BIGINT)
+RETURNS TABLE (
+    id              BIGINT,
+    order_code      VARCHAR,
+    user_id         BIGINT,
+    status          order_status,
+    subtotal        NUMERIC,
+    discount_amount NUMERIC,
+    shipping_fee    NUMERIC,
+    total_amount    NUMERIC,
+    created_at      TIMESTAMPTZ,
+    address         JSON,
+    items           JSON,
+    payment         JSON,
+    status_history  JSON
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        o.id, o.order_code, o.user_id, o.status, o.subtotal, o.discount_amount, o.shipping_fee, o.total_amount, o.created_at,
+        (SELECT json_build_object(
+            'recipient_name', a.recipient_name, 'phone', a.phone, 'line1', a.line1,
+            'ward', a.ward, 'district', a.district, 'province', a.province
+         ) FROM addresses a WHERE a.id = o.address_id),
+        (SELECT json_agg(json_build_object(
+            'id', oi.id,
+            'product_variant_id', oi.product_variant_id,
+            'product_name', oi.product_name_snapshot,
+            'sku', oi.sku_snapshot,
+            'quantity', oi.quantity,
+            'unit_price', oi.unit_price,
+            'line_total', oi.line_total
+         ) ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id),
+        (SELECT json_build_object('method', pm.method, 'status', pm.status, 'amount', pm.amount, 'paid_at', pm.paid_at)
+         FROM payments pm WHERE pm.order_id = o.id),
+        (SELECT json_agg(json_build_object(
+            'from_status', h.from_status, 'to_status', h.to_status, 'note', h.note, 'created_at', h.created_at
+         ) ORDER BY h.created_at)
+         FROM order_status_history h WHERE h.order_id = o.id)
+    FROM orders o
+    WHERE o.id = p_order_id AND o.deleted_at IS NULL;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION list_orders_for_user(
+    p_user_id BIGINT,
+    p_status  order_status DEFAULT NULL,
+    p_limit   INT DEFAULT 20,
+    p_offset  INT DEFAULT 0
+) RETURNS TABLE (
+    id BIGINT, order_code VARCHAR, status order_status, subtotal NUMERIC, discount_amount NUMERIC,
+    shipping_fee NUMERIC, total_amount NUMERIC, created_at TIMESTAMPTZ, total_count BIGINT
+) AS $$
+    SELECT o.id, o.order_code, o.status, o.subtotal, o.discount_amount, o.shipping_fee, o.total_amount,
+           o.created_at, COUNT(*) OVER() AS total_count
+    FROM orders o
+    WHERE o.user_id = p_user_id AND o.deleted_at IS NULL
+      AND (p_status IS NULL OR o.status = p_status)
+    ORDER BY o.created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION list_orders_admin(
+    p_status  order_status DEFAULT NULL,
+    p_user_id BIGINT DEFAULT NULL,
+    p_from    TIMESTAMPTZ DEFAULT NULL,
+    p_to      TIMESTAMPTZ DEFAULT NULL,
+    p_limit   INT DEFAULT 20,
+    p_offset  INT DEFAULT 0
+) RETURNS TABLE (
+    id BIGINT, order_code VARCHAR, status order_status, user_id BIGINT, customer_name VARCHAR,
+    total_amount NUMERIC, created_at TIMESTAMPTZ, total_count BIGINT
+) AS $$
+    SELECT o.id, o.order_code, o.status, o.user_id, u.full_name, o.total_amount, o.created_at,
+           COUNT(*) OVER() AS total_count
+    FROM orders o
+    JOIN users u ON u.id = o.user_id
+    WHERE o.deleted_at IS NULL
+      AND (p_status IS NULL OR o.status = p_status)
+      AND (p_user_id IS NULL OR o.user_id = p_user_id)
+      AND (p_from IS NULL OR o.created_at >= p_from)
+      AND (p_to IS NULL OR o.created_at <= p_to)
+    ORDER BY o.created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION simulate_payment_gateway(
+    p_order_id   BIGINT,
+    p_success    BOOLEAN,
+    p_changed_by BIGINT DEFAULT NULL
+) RETURNS TABLE (
+    order_id BIGINT, order_status order_status, payment_status payment_status, transaction_ref VARCHAR
+) AS $$
+DECLARE
+    v_current_status order_status;
+    v_txn_ref        VARCHAR;
+BEGIN
+    SELECT status INTO v_current_status FROM orders WHERE id = p_order_id AND deleted_at IS NULL;
+    IF v_current_status IS NULL THEN
+        RAISE EXCEPTION 'Order % not found', p_order_id;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM payments WHERE payments.order_id = p_order_id AND status = 'pending') THEN
+        RAISE EXCEPTION 'Order % has no pending payment to process', p_order_id;
+    END IF;
+
+    v_txn_ref := 'SIM-' || to_char(now(), 'YYYYMMDDHH24MISS') || '-' || p_order_id;
+
+    IF p_success THEN
+        UPDATE payments SET status = 'success', paid_at = now(), transaction_ref = v_txn_ref
+        WHERE payments.order_id = p_order_id;
+
+        IF v_current_status = 'pending' THEN
+            PERFORM update_order_status(p_order_id, 'confirmed', p_changed_by, 'Thanh toan thanh cong (gia lap gateway)');
+        END IF;
+    ELSE
+        UPDATE payments SET status = 'failed', transaction_ref = v_txn_ref
+        WHERE payments.order_id = p_order_id;
+    END IF;
+
+    RETURN QUERY
+    SELECT o.id, o.status, pm.status, pm.transaction_ref
+    FROM orders o JOIN payments pm ON pm.order_id = o.id
+    WHERE o.id = p_order_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ------------------------------------------------------------
+-- 25. Tra hang / hoan tien
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION create_refund_request(
+    p_order_id      BIGINT,
+    p_user_id       BIGINT,
+    p_reason        VARCHAR,
+    p_refund_amount NUMERIC DEFAULT NULL
+) RETURNS TABLE (
+    id BIGINT, order_id BIGINT, reason VARCHAR, status refund_status, refund_amount NUMERIC, requested_at TIMESTAMPTZ
+) AS $$
+DECLARE
+    v_order  orders%ROWTYPE;
+    v_amount NUMERIC;
+BEGIN
+    -- Phai qualify orders.id: cot "id" trong RETURNS TABLE tro thanh 1 bien
+    -- OUT-parameter cung ten, "id" khong qualify se bi coi la tham chieu mo ho.
+    SELECT * INTO v_order FROM orders WHERE orders.id = p_order_id AND orders.user_id = p_user_id AND orders.deleted_at IS NULL;
+    IF v_order.id IS NULL THEN
+        RAISE EXCEPTION 'Order % not found for user %', p_order_id, p_user_id;
+    END IF;
+
+    IF v_order.status <> 'delivered' THEN
+        RAISE EXCEPTION 'Only delivered orders can be returned/refunded (current status: %)', v_order.status;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM refund_requests r
+        WHERE r.order_id = p_order_id AND r.status IN ('requested', 'approved', 'refunded')
+    ) THEN
+        RAISE EXCEPTION 'Order % already has an active refund request', p_order_id;
+    END IF;
+
+    v_amount := COALESCE(p_refund_amount, v_order.total_amount);
+
+    RETURN QUERY
+    INSERT INTO refund_requests (order_id, reason, refund_amount)
+    VALUES (p_order_id, p_reason, v_amount)
+    RETURNING refund_requests.id, refund_requests.order_id, refund_requests.reason, refund_requests.status,
+              refund_requests.refund_amount, refund_requests.requested_at;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_refund_request_by_id(p_id BIGINT)
+RETURNS TABLE (
+    id BIGINT, order_id BIGINT, order_code VARCHAR, user_id BIGINT, reason VARCHAR, status refund_status,
+    refund_amount NUMERIC, requested_at TIMESTAMPTZ, processed_by BIGINT, processed_at TIMESTAMPTZ
+) AS $$
+    SELECT r.id, r.order_id, o.order_code, o.user_id, r.reason, r.status, r.refund_amount,
+           r.requested_at, r.processed_by, r.processed_at
+    FROM refund_requests r JOIN orders o ON o.id = r.order_id
+    WHERE r.id = p_id;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION list_refund_requests(
+    p_status  refund_status DEFAULT NULL,
+    p_user_id BIGINT DEFAULT NULL,
+    p_limit   INT DEFAULT 20,
+    p_offset  INT DEFAULT 0
+) RETURNS TABLE (
+    id BIGINT, order_id BIGINT, order_code VARCHAR, user_id BIGINT, reason VARCHAR, status refund_status,
+    refund_amount NUMERIC, requested_at TIMESTAMPTZ, total_count BIGINT
+) AS $$
+    SELECT r.id, r.order_id, o.order_code, o.user_id, r.reason, r.status, r.refund_amount, r.requested_at,
+           COUNT(*) OVER() AS total_count
+    FROM refund_requests r JOIN orders o ON o.id = r.order_id
+    WHERE (p_status IS NULL OR r.status = p_status)
+      AND (p_user_id IS NULL OR o.user_id = p_user_id)
+    ORDER BY r.requested_at DESC
+    LIMIT p_limit OFFSET p_offset;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION process_refund_request(
+    p_id           BIGINT,
+    p_approve      BOOLEAN,
+    p_processed_by BIGINT
+) RETURNS TABLE (
+    id BIGINT, order_id BIGINT, status refund_status, refund_amount NUMERIC, processed_at TIMESTAMPTZ
+) AS $$
+DECLARE
+    v_current    refund_status;
+    v_order_id   BIGINT;
+    v_new_status refund_status;
+BEGIN
+    -- Phai qualify refund_requests.status: cot "status" trong RETURNS TABLE
+    -- tro thanh 1 bien OUT-parameter cung ten, khong qualify se bi mo ho.
+    SELECT refund_requests.status, refund_requests.order_id INTO v_current, v_order_id
+    FROM refund_requests WHERE refund_requests.id = p_id FOR UPDATE;
+
+    IF v_current IS NULL THEN
+        RAISE EXCEPTION 'Refund request % not found', p_id;
+    END IF;
+    IF v_current <> 'requested' THEN
+        RAISE EXCEPTION 'Refund request % already processed (status: %)', p_id, v_current;
+    END IF;
+
+    v_new_status := CASE WHEN p_approve THEN 'refunded' ELSE 'rejected' END;
+
+    UPDATE refund_requests
+    SET status = v_new_status, processed_by = p_processed_by, processed_at = now()
+    WHERE refund_requests.id = p_id;
+
+    IF p_approve THEN
+        UPDATE payments SET status = 'refunded' WHERE payments.order_id = v_order_id;
+    END IF;
+
+    RETURN QUERY
+    SELECT r.id, r.order_id, r.status, r.refund_amount, r.processed_at
+    FROM refund_requests r WHERE r.id = p_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ------------------------------------------------------------
+-- 26. Danh gia san pham — bo sung ben canh submit_review() (muc 11)
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION list_reviews_for_product(
+    p_product_id BIGINT,
+    p_limit      INT DEFAULT 20,
+    p_offset     INT DEFAULT 0
+) RETURNS TABLE (
+    id BIGINT, user_id BIGINT, full_name VARCHAR, rating SMALLINT, comment TEXT,
+    created_at TIMESTAMPTZ, total_count BIGINT
+) AS $$
+    SELECT r.id, r.user_id, u.full_name, r.rating, r.comment, r.created_at, COUNT(*) OVER() AS total_count
+    FROM reviews r
+    JOIN users u ON u.id = r.user_id
+    WHERE r.product_id = p_product_id AND r.is_approved = TRUE
+    ORDER BY r.created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION get_product_rating_summary(p_product_id BIGINT)
+RETURNS TABLE (average_rating NUMERIC, review_count BIGINT) AS $$
+    SELECT COALESCE(ROUND(AVG(rating), 2), 0), COUNT(*)
+    FROM reviews WHERE product_id = p_product_id AND is_approved = TRUE;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION list_reviewable_order_items(p_user_id BIGINT)
+RETURNS TABLE (
+    order_item_id BIGINT, order_id BIGINT, order_code VARCHAR, product_id BIGINT,
+    product_name VARCHAR, sku VARCHAR, delivered_at TIMESTAMPTZ
+) AS $$
+    SELECT oi.id, o.id, o.order_code, pv.product_id, p.name, oi.sku_snapshot, o.updated_at
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    JOIN product_variants pv ON pv.id = oi.product_variant_id
+    JOIN products p ON p.id = pv.product_id
+    WHERE o.user_id = p_user_id AND o.status = 'delivered'
+      AND NOT EXISTS (SELECT 1 FROM reviews rv WHERE rv.order_item_id = oi.id)
+    ORDER BY o.updated_at DESC;
+$$ LANGUAGE sql STABLE;
+
+-- ============================================================
+-- Sprint 4 (Tuan 4) — Bao cao thong ke
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 27. Tong quan dashboard (dung chung voi get_top_selling_books/
+-- get_revenue_report da co san o muc 8-9)
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION get_dashboard_summary(p_from TIMESTAMPTZ, p_to TIMESTAMPTZ)
+RETURNS TABLE (
+    total_orders   BIGINT,
+    total_revenue  NUMERIC,
+    pending_orders BIGINT,
+    new_customers  BIGINT
+) AS $$
+    SELECT
+        (SELECT COUNT(*) FROM orders WHERE created_at BETWEEN p_from AND p_to AND status <> 'cancelled'),
+        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at BETWEEN p_from AND p_to AND status <> 'cancelled'),
+        (SELECT COUNT(*) FROM orders WHERE status = 'pending'),
+        (SELECT COUNT(*) FROM users WHERE role = 'customer' AND created_at BETWEEN p_from AND p_to);
+$$ LANGUAGE sql STABLE;
+
+-- ------------------------------------------------------------
+-- 28. Dia chi giao hang (Addresses) — customer tu quan ly de dung khi checkout.
+-- Khong co trong bang liet ke Sprint 3 nhung place_order() can address_id nen
+-- phai co API tao/xem truoc.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION create_address(
+    p_user_id        BIGINT,
+    p_recipient_name VARCHAR,
+    p_phone          VARCHAR,
+    p_line1          VARCHAR,
+    p_ward           VARCHAR,
+    p_district       VARCHAR,
+    p_province       VARCHAR,
+    p_is_default     BOOLEAN
+) RETURNS TABLE (
+    id BIGINT, user_id BIGINT, recipient_name VARCHAR, phone VARCHAR, line1 VARCHAR,
+    ward VARCHAR, district VARCHAR, province VARCHAR, is_default BOOLEAN, created_at TIMESTAMPTZ
+) AS $$
+DECLARE
+    v_id BIGINT;
+BEGIN
+    IF p_is_default THEN
+        UPDATE addresses SET is_default = FALSE WHERE addresses.user_id = p_user_id;
+    END IF;
+
+    INSERT INTO addresses (user_id, recipient_name, phone, line1, ward, district, province, is_default)
+    VALUES (p_user_id, p_recipient_name, p_phone, p_line1, p_ward, p_district, p_province, p_is_default)
+    RETURNING addresses.id INTO v_id;
+
+    RETURN QUERY
+    SELECT a.id, a.user_id, a.recipient_name, a.phone, a.line1, a.ward, a.district, a.province, a.is_default, a.created_at
+    FROM addresses a WHERE a.id = v_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION list_addresses_for_user(p_user_id BIGINT)
+RETURNS TABLE (
+    id BIGINT, user_id BIGINT, recipient_name VARCHAR, phone VARCHAR, line1 VARCHAR,
+    ward VARCHAR, district VARCHAR, province VARCHAR, is_default BOOLEAN, created_at TIMESTAMPTZ
+) AS $$
+    SELECT a.id, a.user_id, a.recipient_name, a.phone, a.line1, a.ward, a.district, a.province, a.is_default, a.created_at
+    FROM addresses a WHERE a.user_id = p_user_id
+    ORDER BY a.is_default DESC, a.created_at DESC;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION get_address_by_id(p_id BIGINT)
+RETURNS TABLE (
+    id BIGINT, user_id BIGINT, recipient_name VARCHAR, phone VARCHAR, line1 VARCHAR,
+    ward VARCHAR, district VARCHAR, province VARCHAR, is_default BOOLEAN, created_at TIMESTAMPTZ
+) AS $$
+    SELECT a.id, a.user_id, a.recipient_name, a.phone, a.line1, a.ward, a.district, a.province, a.is_default, a.created_at
+    FROM addresses a WHERE a.id = p_id;
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION set_default_address(p_id BIGINT, p_user_id BIGINT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_count INT;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM addresses WHERE id = p_id AND user_id = p_user_id) THEN
+        RETURN FALSE;
+    END IF;
+    UPDATE addresses SET is_default = FALSE WHERE user_id = p_user_id;
+    UPDATE addresses SET is_default = TRUE WHERE id = p_id;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count > 0;
+END;
+$$ LANGUAGE plpgsql;

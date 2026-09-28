@@ -48,3 +48,6 @@ htmlcov/
 
 # Application logs
 backend/logs/
+
+# Generated report files (Celery report tasks)
+backend/reports/*.pdf

@@ -1,32 +1,115 @@
 {
   "info": {
-    "name": "TBookStore API — Sprint 1-2 (Auth, RBAC, Danh mục, Sản phẩm, Kho, Nhân sự)",
-    "description": "Collection test tay cho Sprint 1 (nền tảng: auth/JWT, RBAC, category/supplier) và Sprint 2 (products+variants, nhập kho, nhân sự, excel import, cache). Import collection này + chạy 'Login - Admin' trước, các request khác tự dùng {{access_token}} qua collection-level auth. Mọi request (trừ Health) gọi qua {{api_url}} = {{base_url}}/api/v1 — đường dẫn cũ không prefix vẫn chạy song song (đánh dấu deprecated trong Swagger) để không phá vỡ tích hợp cũ.",
+    "name": "TBookStore API — Sprint 1-4 (đầy đủ)",
+    "description": "Collection test tay Sprint 1-4 day du: auth/JWT/RBAC, danh muc/san pham/kho/nhan su (Sprint 1-2), gio hang/checkout/don hang/khuyen mai/tra hang/danh gia (Sprint 3), thong ke/bao cao PDF/celery/bao mat (Sprint 4). Chay 'Login - Admin' va 'Login - Customer' truoc; request Admin/Staff dung {{access_token}} qua collection-level auth, request rieng cho khach hang (gio hang/checkout/danh gia/tra hang) tu override sang {{customer_access_token}}.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
     "type": "bearer",
-    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
   },
   "variable": [
-    { "key": "base_url", "value": "http://localhost:8000" },
-    { "key": "api_url", "value": "{{base_url}}/api/v1" },
-    { "key": "access_token", "value": "" },
-    { "key": "refresh_token", "value": "" },
-    { "key": "staff_access_token", "value": "" },
-    { "key": "category_id", "value": "1" },
-    { "key": "supplier_id", "value": "1" },
-    { "key": "product_id", "value": "1" },
-    { "key": "variant_id", "value": "1" },
-    { "key": "staff_id", "value": "1" },
-    { "key": "import_lot_id", "value": "1" }
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "api_url",
+      "value": "{{base_url}}/api/v1"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "staff_access_token",
+      "value": ""
+    },
+    {
+      "key": "category_id",
+      "value": "1"
+    },
+    {
+      "key": "supplier_id",
+      "value": "1"
+    },
+    {
+      "key": "product_id",
+      "value": "1"
+    },
+    {
+      "key": "variant_id",
+      "value": "1"
+    },
+    {
+      "key": "staff_id",
+      "value": "1"
+    },
+    {
+      "key": "import_lot_id",
+      "value": "1"
+    },
+    {
+      "key": "customer_access_token",
+      "value": ""
+    },
+    {
+      "key": "address_id",
+      "value": "1"
+    },
+    {
+      "key": "promotion_id",
+      "value": "1"
+    },
+    {
+      "key": "flash_promotion_id",
+      "value": "2"
+    },
+    {
+      "key": "order_id",
+      "value": "1"
+    },
+    {
+      "key": "order_item_id",
+      "value": "1"
+    },
+    {
+      "key": "refund_request_id",
+      "value": "1"
+    },
+    {
+      "key": "report_task_id",
+      "value": ""
+    }
   ],
   "item": [
     {
       "name": "Health",
       "item": [
-        { "name": "Health check", "request": { "method": "GET", "url": "{{base_url}}/health" } },
-        { "name": "Health check DB", "request": { "method": "GET", "url": "{{base_url}}/health/db" } }
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          }
+        },
+        {
+          "name": "Health check DB",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health/db"
+          }
+        }
       ]
     },
     {
@@ -36,7 +119,12 @@
           "name": "Register (customer)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/auth/register",
             "body": {
               "mode": "raw",
@@ -60,13 +148,46 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/auth/login",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"admin@tbookstore.vn\",\n  \"password\": \"Admin@123\"\n}"
             }
           }
+        },
+        {
+          "name": "Login - Customer",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@tbookstore.vn\",\n  \"password\": \"Customer@123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('customer_access_token', data.access_token);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Login - Staff",
@@ -83,7 +204,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/auth/login",
             "body": {
               "mode": "raw",
@@ -107,59 +233,132 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/auth/refresh",
-            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            }
           }
         },
         {
           "name": "Logout",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/auth/logout",
-            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            }
           }
         },
-        { "name": "Me", "request": { "method": "GET", "url": "{{api_url}}/auth/me" } }
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/auth/me"
+          }
+        }
       ]
     },
     {
       "name": "Categories",
       "item": [
-        { "name": "List categories", "request": { "method": "GET", "url": "{{api_url}}/categories?limit=20&offset=0" } },
-        { "name": "Get category by id", "request": { "method": "GET", "url": "{{api_url}}/categories/{{category_id}}" } },
+        {
+          "name": "List categories",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/categories?limit=20&offset=0"
+          }
+        },
+        {
+          "name": "Get category by id",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/categories/{{category_id}}"
+          }
+        },
         {
           "name": "Create category (admin)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/categories",
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ngoại văn\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ngoại văn\"\n}"
+            }
           }
         },
         {
           "name": "Update category (admin)",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/categories/{{category_id}}",
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Văn học Việt Nam\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Văn học Việt Nam\"\n}"
+            }
           }
         },
-        { "name": "Delete category (admin, soft-delete)", "request": { "method": "DELETE", "url": "{{api_url}}/categories/{{category_id}}" } }
+        {
+          "name": "Delete category (admin, soft-delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{api_url}}/categories/{{category_id}}"
+          }
+        }
       ]
     },
     {
       "name": "Suppliers",
       "item": [
-        { "name": "List suppliers (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/suppliers" } },
-        { "name": "Get supplier by id (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/suppliers/{{supplier_id}}" } },
+        {
+          "name": "List suppliers (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/suppliers"
+          }
+        },
+        {
+          "name": "Get supplier by id (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/suppliers/{{supplier_id}}"
+          }
+        },
         {
           "name": "Create supplier (admin)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/suppliers",
             "body": {
               "mode": "raw",
@@ -171,20 +370,52 @@
           "name": "Update supplier (admin)",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/suppliers/{{supplier_id}}",
-            "body": { "mode": "raw", "raw": "{\n  \"address\": \"123 Đường ABC\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"123 Đường ABC\"\n}"
+            }
           }
         },
-        { "name": "Deactivate supplier (admin)", "request": { "method": "DELETE", "url": "{{api_url}}/suppliers/{{supplier_id}}" } }
+        {
+          "name": "Deactivate supplier (admin)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{api_url}}/suppliers/{{supplier_id}}"
+          }
+        }
       ]
     },
     {
       "name": "Products",
       "item": [
-        { "name": "List products (public)", "request": { "method": "GET", "url": "{{api_url}}/products?limit=20&offset=0&sort_by=created_at&sort_dir=desc" } },
-        { "name": "Search products by keyword", "request": { "method": "GET", "url": "{{api_url}}/products?keyword=kim" } },
-        { "name": "Get product by id (public)", "request": { "method": "GET", "url": "{{api_url}}/products/{{product_id}}" } },
+        {
+          "name": "List products (public)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/products?limit=20&offset=0&sort_by=created_at&sort_dir=desc"
+          }
+        },
+        {
+          "name": "Search products by keyword",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/products?keyword=kim"
+          }
+        },
+        {
+          "name": "Get product by id (public)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/products/{{product_id}}"
+          }
+        },
         {
           "name": "Create product + variant (admin/staff)",
           "event": [
@@ -205,7 +436,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/products",
             "body": {
               "mode": "raw",
@@ -217,17 +453,36 @@
           "name": "Update product (admin/staff)",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/products/{{product_id}}",
-            "body": { "mode": "raw", "raw": "{\n  \"base_price\": 105000\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"base_price\": 105000\n}"
+            }
           }
         },
-        { "name": "Delete product (admin/staff, soft-delete)", "request": { "method": "DELETE", "url": "{{api_url}}/products/{{product_id}}" } },
+        {
+          "name": "Delete product (admin/staff, soft-delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{api_url}}/products/{{product_id}}"
+          }
+        },
         {
           "name": "Add variant to product (admin/staff)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/products/{{product_id}}/variants",
             "body": {
               "mode": "raw",
@@ -239,12 +494,26 @@
           "name": "Update variant (admin/staff)",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/products/variants/{{variant_id}}",
-            "body": { "mode": "raw", "raw": "{\n  \"reorder_level\": 8\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reorder_level\": 8\n}"
+            }
           }
         },
-        { "name": "Deactivate variant (admin/staff)", "request": { "method": "PATCH", "url": "{{api_url}}/products/variants/{{variant_id}}/deactivate" } },
+        {
+          "name": "Deactivate variant (admin/staff)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{api_url}}/products/variants/{{variant_id}}/deactivate"
+          }
+        },
         {
           "name": "Import products from Excel (admin/staff)",
           "request": {
@@ -252,7 +521,13 @@
             "url": "{{api_url}}/products/import-excel",
             "body": {
               "mode": "formdata",
-              "formdata": [{ "key": "file", "type": "file", "src": [] }]
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
             }
           }
         }
@@ -261,8 +536,20 @@
     {
       "name": "Employees (Staff management - admin only)",
       "item": [
-        { "name": "List staff", "request": { "method": "GET", "url": "{{api_url}}/employees" } },
-        { "name": "Get staff by id", "request": { "method": "GET", "url": "{{api_url}}/employees/{{staff_id}}" } },
+        {
+          "name": "List staff",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/employees"
+          }
+        },
+        {
+          "name": "Get staff by id",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/employees/{{staff_id}}"
+          }
+        },
         {
           "name": "Create staff",
           "event": [
@@ -279,7 +566,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/employees",
             "body": {
               "mode": "raw",
@@ -291,21 +583,59 @@
           "name": "Update staff",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/employees/{{staff_id}}",
-            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"0922222222\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"0922222222\"\n}"
+            }
           }
         },
-        { "name": "Lock staff", "request": { "method": "PATCH", "url": "{{api_url}}/employees/{{staff_id}}/lock" } },
-        { "name": "Unlock staff", "request": { "method": "PATCH", "url": "{{api_url}}/employees/{{staff_id}}/unlock" } },
-        { "name": "Delete staff (soft-delete)", "request": { "method": "DELETE", "url": "{{api_url}}/employees/{{staff_id}}" } }
+        {
+          "name": "Lock staff",
+          "request": {
+            "method": "PATCH",
+            "url": "{{api_url}}/employees/{{staff_id}}/lock"
+          }
+        },
+        {
+          "name": "Unlock staff",
+          "request": {
+            "method": "PATCH",
+            "url": "{{api_url}}/employees/{{staff_id}}/unlock"
+          }
+        },
+        {
+          "name": "Delete staff (soft-delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{api_url}}/employees/{{staff_id}}"
+          }
+        }
       ]
     },
     {
       "name": "Import Lots (Nhập kho)",
       "item": [
-        { "name": "List import lots (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/import-lots" } },
-        { "name": "Get import lot by id (admin/staff)", "request": { "method": "GET", "url": "{{api_url}}/import-lots/{{import_lot_id}}" } },
+        {
+          "name": "List import lots (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/import-lots"
+          }
+        },
+        {
+          "name": "Get import lot by id (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/import-lots/{{import_lot_id}}"
+          }
+        },
         {
           "name": "Create import lot -> restock (admin/staff)",
           "event": [
@@ -322,12 +652,809 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{api_url}}/import-lots",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"supplier_id\": {{supplier_id}},\n  \"items\": [\n    { \"product_variant_id\": {{variant_id}}, \"quantity\": 50, \"unit_cost\": 40000 }\n  ]\n}"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Addresses (Customer)",
+      "item": [
+        {
+          "name": "List my addresses",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/addresses",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create address",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/addresses",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient_name\": \"Nguyen Van A\",\n  \"phone\": \"0900000009\",\n  \"line1\": \"123 Duong ABC\",\n  \"ward\": \"Phuong 1\",\n  \"district\": \"Quan 1\",\n  \"province\": \"TP.HCM\",\n  \"is_default\": true\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('address_id', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set address as default",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/addresses/{{address_id}}/default",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cart (Customer)",
+      "item": [
+        {
+          "name": "Get my cart",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/cart",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add item to cart",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/cart/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_variant_id\": \"{{variant_id}}\",\n  \"quantity\": 2\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update cart item quantity",
+          "request": {
+            "method": "PUT",
+            "url": "{{api_url}}/cart/items/{{variant_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 3\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Remove item from cart",
+          "request": {
+            "method": "DELETE",
+            "url": "{{api_url}}/cart/items/{{variant_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Clear cart",
+          "request": {
+            "method": "DELETE",
+            "url": "{{api_url}}/cart",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Promotions - Voucher & Flash sale (Admin)",
+      "item": [
+        {
+          "name": "Get active flash sales (public)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/promotions/flash-sales/active"
+          }
+        },
+        {
+          "name": "List promotions (admin)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/promotions"
+          }
+        },
+        {
+          "name": "Create voucher (percentage)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/promotions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SALE10\",\n  \"type\": \"percentage\",\n  \"value\": 10,\n  \"min_order_amount\": 50000,\n  \"starts_at\": \"2026-01-01T00:00:00Z\",\n  \"ends_at\": \"2027-01-01T00:00:00Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('promotion_id', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create flash sale promotion",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/promotions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"flash_sale\",\n  \"value\": 1,\n  \"starts_at\": \"2026-01-01T00:00:00Z\",\n  \"ends_at\": \"2027-01-01T00:00:00Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('flash_promotion_id', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add flash sale item",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/promotions/{{flash_promotion_id}}/flash-sale-items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_variant_id\": \"{{variant_id}}\",\n  \"flash_price\": 50000,\n  \"quantity_limit\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "List flash sale items of a promotion",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/promotions/{{flash_promotion_id}}/flash-sale-items"
+          }
+        },
+        {
+          "name": "Deactivate promotion",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/promotions/{{promotion_id}}/deactivate"
+          }
+        },
+        {
+          "name": "Activate promotion",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/promotions/{{promotion_id}}/activate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checkout & Orders",
+      "item": [
+        {
+          "name": "Preview checkout (with voucher)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/orders/checkout/preview?promotion_code=SALE10",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Checkout (COD)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/orders/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"payment_method\": \"cod\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('order_id', data.id);",
+                  "  if (data.items && data.items.length) {",
+                  "    pm.collectionVariables.set('order_item_id', data.items[0].id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Checkout (simulated gateway)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/orders/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"payment_method\": \"simulated_gateway\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Simulate payment gateway callback (success)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/orders/{{order_id}}/payment/simulate",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"success\": true\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List my orders (customer)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/orders",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get order detail",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/orders/{{order_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cancel my order (customer, only when pending)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{api_url}}/orders/{{order_id}}/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"cancelled\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List all orders (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/orders/admin"
+          }
+        },
+        {
+          "name": "Confirm order (admin/staff)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{api_url}}/orders/{{order_id}}/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Mark order as shipping (admin/staff)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{api_url}}/orders/{{order_id}}/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shipping\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Mark order as delivered (admin/staff)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{api_url}}/orders/{{order_id}}/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"delivered\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Download invoice PDF",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/orders/{{order_id}}/invoice",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refunds - Tra hang/hoan tien",
+      "item": [
+        {
+          "name": "Create refund request (customer, order must be Delivered)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/refunds",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"reason\": \"Sach bi loi trang, xin hoan tien\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('refund_request_id', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my refund requests (customer)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/refunds",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List all refund requests (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/refunds/admin"
+          }
+        },
+        {
+          "name": "Get refund request detail",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/refunds/{{refund_request_id}}"
+          }
+        },
+        {
+          "name": "Approve refund request (admin/staff)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/refunds/{{refund_request_id}}/process",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews - Danh gia san pham",
+      "item": [
+        {
+          "name": "List reviewable order items (customer)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/reviews/reviewable",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit review (customer, order item must be Delivered)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/reviews",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_item_id\": \"{{order_item_id}}\",\n  \"rating\": 5,\n  \"comment\": \"Rat hay, dong goi can than!\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List reviews for a product (public)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/reviews/product/{{product_id}}"
+          }
+        },
+        {
+          "name": "Get product rating summary (public)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/reviews/product/{{product_id}}/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Statistics & Reports (Admin/Staff)",
+      "item": [
+        {
+          "name": "Top selling books",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/statistics/top-selling-books?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z&limit=10"
+          }
+        },
+        {
+          "name": "Revenue report",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/statistics/revenue-report?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
+          }
+        },
+        {
+          "name": "Revenue report (PDF export)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/statistics/revenue-report/pdf?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
+          }
+        },
+        {
+          "name": "Dashboard summary",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/statistics/dashboard?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
+          }
+        },
+        {
+          "name": "Trigger async revenue report (Celery)",
+          "request": {
+            "method": "POST",
+            "url": "{{api_url}}/reports/revenue/async",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"2020-01-01T00:00:00Z\",\n  \"date_to\": \"2030-01-01T00:00:00Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('report_task_id', data.task_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check async report status",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/reports/revenue/async/{{report_task_id}}"
+          }
+        },
+        {
+          "name": "Download async report (once status=SUCCESS)",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/reports/revenue/async/{{report_task_id}}/download"
           }
         }
       ]

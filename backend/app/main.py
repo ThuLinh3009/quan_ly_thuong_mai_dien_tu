@@ -8,10 +8,28 @@ from fastapi.routing import APIRoute
 
 from app.core import database
 from app.core.config import get_settings
+from app.core.db_transaction_middleware import DBTransactionMiddleware
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.ratelimit import RateLimitMiddleware
 from app.core.redis import close_redis, open_redis
-from app.routers import auth, categories, employees, health, import_lots, products, suppliers
+from app.routers import (
+    addresses,
+    auth,
+    cart,
+    categories,
+    employees,
+    health,
+    import_lots,
+    orders,
+    products,
+    promotions,
+    refunds,
+    reports,
+    reviews,
+    statistics,
+    suppliers,
+)
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -31,6 +49,14 @@ async def lifespan(_: FastAPI):
 settings = get_settings()
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+# Middleware quan ly transaction (xem db_transaction_middleware.py) phai duoc
+# add_middleware() DAU TIEN de no la middleware trong cung (gan Router nhat) —
+# Starlette build_middleware_stack() insert(0,...) moi lan add_middleware(),
+# nen middleware add TRUOC se nam GAN Router hon. Dat gan Router giup cac
+# middleware khac (CORS preflight, rate limit) short-circuit ma khong mo
+# connection DB khong can thiet.
+app.add_middleware(DBTransactionMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -38,6 +64,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limit chung theo IP (Sprint 4, mục 44) — /auth/login có giới hạn riêng
+# chặt hơn qua dependency app.core.ratelimit.login_rate_limit.
+app.add_middleware(RateLimitMiddleware, limit=120, window=60)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Header bảo mật cơ bản chống clickjacking/MIME-sniffing (Sprint 4, mục
+    44). API chỉ trả JSON/PDF, không dùng cookie phiên -> không cần CSRF token
+    (JWT gửi qua header Authorization, không phải "ambient credential" mà
+    CSRF khai thác)."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
 
 
 @app.middleware("http")
@@ -66,7 +110,22 @@ register_exception_handlers(app)
 app.include_router(health.router)
 
 API_V1_PREFIX = "/api/v1"
-_versioned_routers = (auth.router, categories.router, suppliers.router, products.router, employees.router, import_lots.router)
+_versioned_routers = (
+    auth.router,
+    categories.router,
+    suppliers.router,
+    products.router,
+    employees.router,
+    import_lots.router,
+    addresses.router,
+    cart.router,
+    promotions.router,
+    orders.router,
+    refunds.router,
+    reviews.router,
+    statistics.router,
+    reports.router,
+)
 
 
 def _legacy_operation_id(route: APIRoute) -> str:

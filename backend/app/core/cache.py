@@ -18,6 +18,11 @@ DEFAULT_TTL_SECONDS = 300
 
 CATEGORY_PREFIX = "cache:categories"
 PRODUCT_PREFIX = "cache:products"
+STATISTICS_PREFIX = "cache:statistics"
+
+# Bao cao thong ke doc du lieu gan-thoi-gian-thuc (don moi vua tao), TTL ngan
+# hon cache danh muc/san pham de khong hien so lieu qua cu tren dashboard.
+STATISTICS_TTL_SECONDS = 60
 
 
 async def get_json(key: str) -> Any | None:

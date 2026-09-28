@@ -14,8 +14,31 @@ services:
     volumes:
       - ./backend/app:/code/app
       - ./backend/logs:/code/logs
+      - ./backend/reports:/code/reports
       - ./database:/database:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery-worker:
+    build: ./backend
+    container_name: tbookstore-celery-worker
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://tbookstore:tbookstore@postgres:5432/tbookstore
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mailhog
+    volumes:
+      - ./backend/app:/code/app
+      - ./backend/reports:/code/reports
+    # --pool=solo: don gian, chay duoc tren moi platform (khong can fork worker
+    # con nhu prefork mac dinh) — du dung cho khoi luong tac vu nho cua project.
+    command: celery -A app.celery_app worker --loglevel=info --pool=solo
     depends_on:
       postgres:
         condition: service_healthy

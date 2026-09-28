@@ -42,6 +42,10 @@ class UnauthorizedError(AppError):
     status_code = 401
 
 
+class TooManyRequestsError(AppError):
+    status_code = 429
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:

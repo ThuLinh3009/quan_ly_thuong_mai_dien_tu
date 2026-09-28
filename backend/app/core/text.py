@@ -12,3 +12,13 @@ def slugify(text: str) -> str:
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     text = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return text or "item"
+
+
+_TAG_RE = re.compile(r"<[^>]*>")
+
+
+def strip_html_tags(text: str) -> str:
+    """Chống stored-XSS: bóc thẻ HTML/script khỏi các trường tự do do khách
+    hàng nhập (review comment, lý do hoàn hàng...) trước khi lưu DB — phòng
+    trường hợp FE hiển thị lại nội dung này mà quên escape."""
+    return _TAG_RE.sub("", text).strip()
