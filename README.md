@@ -241,6 +241,7 @@ Mục tiêu coverage: 30–40%, ưu tiên luồng đặt hàng và thanh toán.
 - [`docs/ERD.png`](docs/ERD.png) — sơ đồ thực thể quan hệ
 - [`docs/TBookStore.postman_collection.json`](docs/TBookStore.postman_collection.json) — bộ test API bằng Postman (131 request, 334 assertion)
 - [`docs/HUONG_DAN_TEST_API_POSTMAN.md`](docs/HUONG_DAN_TEST_API_POSTMAN.md) — hướng dẫn test API bằng Postman: import collection, token, biến id, danh sách đầy đủ API theo role
+- [`docs/KICH_BAN_TEST_NHANH_MUA_HANG.md`](docs/KICH_BAN_TEST_NHANH_MUA_HANG.md) + [`docs/TBookStore_LuongMuaHang.postman_collection.json`](docs/TBookStore_LuongMuaHang.postman_collection.json) — test nhanh luồng mua hàng: xem sách → giỏ → đặt hàng → xử lý đơn → đánh giá → hoàn tiền (29 request)
 - [`docs/HUONG_DAN_TEST_TUNG_API.md`](docs/HUONG_DAN_TEST_TUNG_API.md) — test tay từng API trên dữ liệu `seed_realistic` (id thật, kết quả đúng, SQL kiểm tra)
 - [`docs/sql/KIEM_TRA_SAU_KHI_GOI_API.sql`](docs/sql/KIEM_TRA_SAU_KHI_GOI_API.sql) — câu SQL xem dữ liệu thay đổi sau khi gọi API
 - [`docs/sql/TEST_TUNG_THU_TUC.sql`](docs/sql/TEST_TUNG_THU_TUC.sql) — gọi thử từng thủ tục PostgreSQL với id thật

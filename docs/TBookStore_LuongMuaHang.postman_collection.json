@@ -1,0 +1,1285 @@
+{
+  "info": {
+    "name": "TBookStore — Test nhanh luồng mua hàng",
+    "description": "Kịch bản test nhanh luồng mua hàng (29 request, 81 kiểm tra): đăng nhập → xem sách → giỏ hàng → đặt hàng COD → nhân viên xử lý đơn → khách nhận hàng, tải hóa đơn → đánh giá → hoàn tiền.\n\nChạy: chuột phải collection → Run collection → Run (hoặc bấm Send lần lượt từ trên xuống).\nCLI: postman collection run docs/TBookStore_LuongMuaHang.postman_collection.json\n\nDùng tài khoản mẫu customer@tbookstore.vn / staff@tbookstore.vn; tự chọn 1 sách còn ≥ 2 cuốn, tự lấy (hoặc tạo) địa chỉ giao hàng. Mỗi lần chạy tạo 1 đơn mới. Mô tả từng bước: docs/KICH_BAN_TEST_NHANH_MUA_HANG.md",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test(\"[chung] Không lỗi server 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "qn_customer_token",
+      "value": ""
+    },
+    {
+      "key": "qn_staff_token",
+      "value": ""
+    },
+    {
+      "key": "qn_candidates",
+      "value": ""
+    },
+    {
+      "key": "qn_candidate_idx",
+      "value": ""
+    },
+    {
+      "key": "qn_product_id",
+      "value": ""
+    },
+    {
+      "key": "qn_variant_id",
+      "value": ""
+    },
+    {
+      "key": "qn_stock_before",
+      "value": ""
+    },
+    {
+      "key": "qn_book_name",
+      "value": ""
+    },
+    {
+      "key": "qn_review_count_before",
+      "value": ""
+    },
+    {
+      "key": "qn_unit_price",
+      "value": ""
+    },
+    {
+      "key": "qn_expected_total",
+      "value": ""
+    },
+    {
+      "key": "qn_address_id",
+      "value": ""
+    },
+    {
+      "key": "qn_order_id",
+      "value": ""
+    },
+    {
+      "key": "qn_order_code",
+      "value": ""
+    },
+    {
+      "key": "qn_order_item_id",
+      "value": ""
+    },
+    {
+      "key": "qn_refund_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Đăng nhập",
+      "description": "Khách hàng và nhân viên mẫu có sẵn sau migrate --seed.",
+      "item": [
+        {
+          "name": "1.1 Khách đăng nhập",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@tbookstore.vn\",\n  \"password\": \"Customer@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "if (pm.response.code === 200) pm.collectionVariables.set(\"qn_customer_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Nhân viên đăng nhập",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"staff@tbookstore.vn\",\n  \"password\": \"Staff@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "if (pm.response.code === 200) pm.collectionVariables.set(\"qn_staff_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Khách xem hàng",
+      "description": "Xem danh sách, chọn 1 sách còn đủ hàng, xem đánh giá và gợi ý.",
+      "item": [
+        {
+          "name": "2.1 Xem danh sách sách đang bán",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products?limit=30&offset=0&sort_by=name&sort_dir=asc",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "const items = pm.response.json().items || [];",
+                  "pm.test(\"Có sách, tất cả đang bán\", function () {",
+                  "    pm.expect(items.length).to.be.above(0);",
+                  "    items.forEach(x => pm.expect(x.is_active).to.eql(true));",
+                  "});",
+                  "pm.collectionVariables.set(\"qn_candidates\", JSON.stringify(items.map(x => x.id)));",
+                  "pm.collectionVariables.set(\"qn_candidate_idx\", 0);",
+                  "if (items.length) pm.collectionVariables.set(\"qn_product_id\", items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Xem chi tiết sách (chọn biến thể còn ≥ 2 cuốn)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/{{qn_product_id}}",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "const d = pm.response.json();",
+                  "const v = (d.variants || []).find(x => x.is_active && x.quantity_on_hand >= 2);",
+                  "if (v) {",
+                  "    pm.collectionVariables.set(\"qn_variant_id\", v.id);",
+                  "    pm.collectionVariables.set(\"qn_stock_before\", v.quantity_on_hand);",
+                  "    pm.collectionVariables.set(\"qn_book_name\", d.name + \" (\" + v.variant_name + \")\");",
+                  "    pm.test(\"Chọn: \" + d.name + \" — \" + v.variant_name + \", tồn \" + v.quantity_on_hand, function () {",
+                  "        pm.expect(v.quantity_on_hand).to.be.at.least(2);",
+                  "    });",
+                  "} else {",
+                  "    const ids = JSON.parse(pm.collectionVariables.get(\"qn_candidates\") || \"[]\");",
+                  "    const i = Number(pm.collectionVariables.get(\"qn_candidate_idx\")) + 1;",
+                  "    if (i < ids.length) {",
+                  "        pm.collectionVariables.set(\"qn_candidate_idx\", i);",
+                  "        pm.collectionVariables.set(\"qn_product_id\", ids[i]);",
+                  "        console.log(\"Sách \" + d.id + \" không đủ hàng, thử sách \" + ids[i]);",
+                  "        postman.setNextRequest(pm.info.requestName);  // Runner: thử sách kế tiếp. Chạy tay: bấm Send lại.",
+                  "    } else {",
+                  "        pm.test(\"Có sách đủ hàng để mua\", function () { pm.expect.fail(\"Không sách nào còn ≥ 2 cuốn\"); });",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Xem điểm đánh giá của sách",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/reviews/product/{{qn_product_id}}/summary",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.collectionVariables.set(\"qn_review_count_before\", pm.response.json().review_count);",
+                  "pm.test(\"Có average_rating và review_count\", function () {",
+                  "    pm.expect(pm.response.json()).to.have.all.keys(\"average_rating\", \"review_count\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Xem gợi ý sách tương tự",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/{{qn_product_id}}/recommendations?limit=5",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Tối đa 5 sách, không gợi ý chính sách đang xem\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.length).to.be.at.most(5);",
+                  "    pm.expect(d.map(x => x.product_id)).to.not.include(Number(pm.collectionVariables.get(\"qn_product_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Giỏ hàng",
+      "description": "Bắt đầu từ giỏ trống, thêm 2 cuốn, kiểm tra tiền.",
+      "item": [
+        {
+          "name": "3.1 Làm trống giỏ hàng",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/cart",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Thêm 2 cuốn vào giỏ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/cart/items",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_variant_id\": {{qn_variant_id}},\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "const line = pm.response.json().items.find(x => x.product_variant_id === Number(pm.collectionVariables.get(\"qn_variant_id\")));",
+                  "pm.test(\"Giỏ có đúng sách đã chọn, số lượng 2\", function () {",
+                  "    pm.expect(line).to.exist;",
+                  "    pm.expect(line.quantity).to.eql(2);",
+                  "});",
+                  "if (line) pm.collectionVariables.set(\"qn_unit_price\", Number(line.unit_price));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 Xem giỏ hàng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/cart",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Tạm tính = 2 × đơn giá\", function () {",
+                  "    pm.expect(Number(pm.response.json().subtotal)).to.eql(2 * Number(pm.collectionVariables.get(\"qn_unit_price\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Đặt hàng",
+      "description": "Xem trước tiền, đặt COD, kiểm tra giỏ và tồn kho.",
+      "item": [
+        {
+          "name": "4.1 Xem trước đơn hàng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/orders/checkout/preview",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "const d = pm.response.json();",
+                  "pm.test(\"Ship 30.000, tổng = tạm tính − giảm giá + ship\", function () {",
+                  "    pm.expect(Number(d.shipping_fee)).to.eql(30000);",
+                  "    pm.expect(Number(d.total_amount)).to.eql(Number(d.subtotal) - Number(d.discount_amount) + 30000);",
+                  "});",
+                  "pm.collectionVariables.set(\"qn_expected_total\", Number(d.total_amount));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Đặt hàng (thanh toán khi nhận hàng - COD)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/checkout",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": {{qn_address_id}},\n  \"payment_method\": \"cod\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Lấy địa chỉ mặc định của khách; chưa có địa chỉ nào thì tạo 1 cái.",
+                  "const token = pm.collectionVariables.get(\"qn_customer_token\");",
+                  "pm.sendRequest({ url: \"http://localhost:5080/api/v1/addresses\", method: \"GET\", header: { Authorization: \"Bearer \" + token } }, function (err, res) {",
+                  "    if (!err && res.code === 200 && res.json().length > 0) {",
+                  "        pm.collectionVariables.set(\"qn_address_id\", res.json()[0].id);",
+                  "        return;",
+                  "    }",
+                  "    pm.sendRequest({",
+                  "        url: \"http://localhost:5080/api/v1/addresses\", method: \"POST\",",
+                  "        header: { Authorization: \"Bearer \" + token, \"Content-Type\": \"application/json\" },",
+                  "        body: { mode: \"raw\", raw: JSON.stringify({ recipient_name: \"Khach Test Nhanh\", phone: \"0900000099\", line1: \"1 Đường Test\", province: \"TP.HCM\", is_default: true }) }",
+                  "    }, function (e2, r2) { if (!e2 && r2.code === 201) pm.collectionVariables.set(\"qn_address_id\", r2.json().id); });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "const d = pm.response.json();",
+                  "pm.test(\"Đơn pending, COD, đúng tổng tiền đã xem trước\", function () {",
+                  "    pm.expect(d.status).to.eql(\"pending\");",
+                  "    pm.expect(d.payment.method).to.eql(\"cod\");",
+                  "    pm.expect(Number(d.total_amount)).to.eql(Number(pm.collectionVariables.get(\"qn_expected_total\")));",
+                  "    pm.expect(d.order_code).to.match(/^ORD-\\d{8}-\\d+$/);",
+                  "});",
+                  "if (pm.response.code === 201) { pm.collectionVariables.set(\"qn_order_id\", d.id); pm.collectionVariables.set(\"qn_order_code\", d.order_code); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Giỏ hàng trống sau khi đặt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/cart",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Giỏ đã được làm trống\", function () {",
+                  "    pm.expect(pm.response.json().items.length).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Tồn kho đã trừ 2 cuốn",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/{{qn_product_id}}",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "const v = pm.response.json().variants.find(x => x.id === Number(pm.collectionVariables.get(\"qn_variant_id\")));",
+                  "pm.test(\"Tồn kho = trước khi mua − 2\", function () {",
+                  "    pm.expect(v.quantity_on_hand).to.eql(Number(pm.collectionVariables.get(\"qn_stock_before\")) - 2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.5 Khách xem chi tiết đơn vừa đặt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "const d = pm.response.json();",
+                  "pm.test(\"Đơn pending, 1 dòng hàng, 1 dòng lịch sử, chờ thanh toán\", function () {",
+                  "    pm.expect(d.status).to.eql(\"pending\");",
+                  "    pm.expect(d.items.length).to.eql(1);",
+                  "    pm.expect(d.status_history.length).to.eql(1);",
+                  "    pm.expect(d.payment.status).to.eql(\"pending\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Nhân viên xử lý đơn",
+      "description": "pending → confirmed → shipping → delivered. Khách không được tự xác nhận.",
+      "item": [
+        {
+          "name": "5.1 Khách thử tự xác nhận đơn → 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}/status",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Nhân viên thấy đơn mới trong danh sách chờ xử lý",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/orders/admin?status=pending&limit=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_staff_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có đơn vừa đặt\", function () {",
+                  "    pm.expect(pm.response.json().items.map(x => x.id)).to.include(Number(pm.collectionVariables.get(\"qn_order_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Nhân viên xác nhận đơn",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}/status",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_staff_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\",\n  \"note\": \"Đã gọi xác nhận với khách\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"confirmed\", function () { pm.expect(pm.response.json().status).to.eql(\"confirmed\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Nhân viên giao cho đơn vị vận chuyển",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}/status",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_staff_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shipping\",\n  \"note\": \"Bàn giao GHN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"shipping\", function () { pm.expect(pm.response.json().status).to.eql(\"shipping\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Nhân viên xác nhận đã giao",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}/status",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_staff_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"delivered\",\n  \"note\": \"Khách đã nhận hàng\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"delivered\", function () { pm.expect(pm.response.json().status).to.eql(\"delivered\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.6 Chuyển sai luồng (delivered → confirmed) → 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}/status",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_staff_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Khách nhận hàng",
+      "description": "Theo dõi đơn và tải hóa đơn.",
+      "item": [
+        {
+          "name": "6.1 Khách theo dõi đơn: đã giao",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "const h = pm.response.json().status_history.map(x => x.to_status).join(\">\");",
+                  "pm.test(\"Lịch sử: pending > confirmed > shipping > delivered\", function () {",
+                  "    pm.expect(pm.response.json().status).to.eql(\"delivered\");",
+                  "    pm.expect(h).to.eql(\"pending>confirmed>shipping>delivered\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Tải hóa đơn PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}/invoice",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Trong app Postman: bấm mũi tên cạnh Send → Send and Download để lưu file."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"File PDF\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Đánh giá",
+      "description": "Chỉ sách thuộc đơn đã giao mới đánh giá được, mỗi dòng hàng 1 lần.",
+      "item": [
+        {
+          "name": "7.1 Danh sách sách chờ đánh giá",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/reviews/reviewable",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "const it = pm.response.json().find(x => x.order_id === Number(pm.collectionVariables.get(\"qn_order_id\")));",
+                  "pm.test(\"Có sách của đơn vừa nhận\", function () { pm.expect(it).to.exist; });",
+                  "if (it) pm.collectionVariables.set(\"qn_order_item_id\", it.order_item_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.2 Đánh giá 5 sao",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/reviews",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_item_id\": {{qn_order_item_id}},\n  \"rating\": 5,\n  \"comment\": \"Sách đẹp, giao nhanh\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Trả về id đánh giá\", function () { pm.expect(pm.response.json().id).to.be.a(\"number\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.3 Đánh giá lần 2 cùng sách → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/reviews",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_item_id\": {{qn_order_item_id}},\n  \"rating\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.4 Điểm đánh giá đã cập nhật (công khai)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/reviews/product/{{qn_product_id}}/summary",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Số lượt đánh giá tăng 1\", function () {",
+                  "    pm.expect(pm.response.json().review_count).to.eql(Number(pm.collectionVariables.get(\"qn_review_count_before\")) + 1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Trả hàng, hoàn tiền",
+      "description": "Khách gửi yêu cầu, nhân viên duyệt, thanh toán của đơn chuyển refunded.",
+      "item": [
+        {
+          "name": "8.1 Khách gửi yêu cầu hoàn tiền",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/refunds",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": {{qn_order_id}},\n  \"reason\": \"Sách bị lỗi in vài trang\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Trạng thái requested\", function () { pm.expect(pm.response.json().status).to.eql(\"requested\"); });",
+                  "if (pm.response.code === 201) pm.collectionVariables.set(\"qn_refund_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.2 Nhân viên duyệt hoàn tiền",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/refunds/{{qn_refund_id}}/process",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_staff_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Trạng thái refunded\", function () { pm.expect(pm.response.json().status).to.eql(\"refunded\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.3 Khách xem đơn: thanh toán đã hoàn",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/orders/{{qn_order_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{qn_customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"payment.status = refunded\", function () {",
+                  "    pm.expect(pm.response.json().payment.status).to.eql(\"refunded\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
