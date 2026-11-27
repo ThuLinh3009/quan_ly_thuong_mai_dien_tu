@@ -6,22 +6,48 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: postgresql://tbookstore:tbookstore@postgres:5432/tbookstore
+      # DB là PostgreSQL cài trên máy (Windows, cổng 5432), không chạy trong Docker.
+      # host.docker.internal = địa chỉ máy host nhìn từ trong container.
+      DATABASE_URL: postgresql://tbookstore:tbookstore@host.docker.internal:5432/tbookstore
       REDIS_URL: redis://redis:6379/0
       SMTP_HOST: mailhog
-    ports:
-      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Không publish cổng ra máy host: mọi request phải đi qua service "gateway"
+    # (http://localhost). Trong Docker network gateway gọi tới "api:8000".
+    expose:
+      - "8000"
     volumes:
       - ./backend/app:/code/app
       - ./backend/logs:/code/logs
       - ./backend/reports:/code/reports
       - ./database:/database:ro
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # --proxy-headers + --forwarded-allow-ips: tin header X-Forwarded-For do
+    # gateway gắn, để request.client.host là IP thật của client (rate limit
+    # theo IP của FastAPI mới đúng). An toàn vì cổng 8000 không lộ ra ngoài.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips=*
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
+
+  # API Gateway — cổng vào duy nhất của hệ thống (cấu hình: gateway/nginx.conf).
+  # Cổng ra host mặc định 5080 (http://localhost:5080). Đổi: GATEWAY_PORT=8080 docker compose up -d
+  gateway:
+    image: nginx:1.28-alpine
+    container_name: tbookstore-gateway
+    ports:
+      - "${GATEWAY_PORT:-5080}:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway/logs:/var/log/nginx
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/gateway/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
 
   celery-worker:
     build: ./backend
@@ -30,9 +56,11 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: postgresql://tbookstore:tbookstore@postgres:5432/tbookstore
+      DATABASE_URL: postgresql://tbookstore:tbookstore@host.docker.internal:5432/tbookstore
       REDIS_URL: redis://redis:6379/0
       SMTP_HOST: mailhog
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend/app:/code/app
       - ./backend/reports:/code/reports
@@ -40,12 +68,16 @@ services:
     # con nhu prefork mac dinh) — du dung cho khoi luong tac vu nho cua project.
     command: celery -A app.celery_app worker --loglevel=info --pool=solo
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
 
+  # PostgreSQL trong Docker — KHÔNG còn dùng mặc định (api/worker dùng PostgreSQL
+  # cài trên máy, cổng 5432). Giữ lại làm tùy chọn/dữ liệu cũ (volume pgdata):
+  #   docker compose --profile docker-db up -d postgres   -> xem ở localhost:5433
+  # Muốn api dùng lại DB này: đổi DATABASE_URL của api + celery-worker về
+  # postgresql://tbookstore:tbookstore@postgres:5432/tbookstore
   postgres:
+    profiles: ["docker-db"]
     image: postgres:16
     container_name: tbookstore-postgres
     environment:
@@ -53,7 +85,10 @@ services:
       POSTGRES_PASSWORD: tbookstore
       POSTGRES_DB: tbookstore
     ports:
-      - "5432:5432"
+      # Host 5433 -> container 5432: tránh xung đột với PostgreSQL cài native trên
+      # Windows (thường chiếm sẵn cổng 5432). Bên trong Docker network, các service
+      # khác (api, celery-worker) vẫn gọi qua "postgres:5432" như cũ, không đổi.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

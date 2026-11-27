@@ -5,7 +5,6 @@ from typing import Any
 from psycopg import AsyncConnection
 
 from app.core.audit import record_audit
-from app.core.db_errors import call_db
 from app.core.errors import ConflictError, NotFoundError
 from app.repositories import promotion_repo, variant_repo
 from app.schemas.common import Page
@@ -115,15 +114,3 @@ async def list_flash_sale_items(conn: AsyncConnection, promotion_id: int) -> lis
 
 async def get_active_flash_sales(conn: AsyncConnection, limit: int) -> list[dict[str, Any]]:
     return await promotion_repo.get_active_flash_sales(conn, limit)
-
-
-async def preview_checkout_discount(conn: AsyncConnection, user_id: int, promotion_code: str | None) -> dict[str, Any]:
-    """Dùng lại preview_checkout() (DB) để khách xem trước tổng tiền/giảm giá
-    trước khi đặt hàng thật — không tạo đơn, không trừ tồn kho."""
-    async def _call() -> dict[str, Any]:
-        cur = await conn.execute("SELECT * FROM preview_checkout(%s, %s)", (user_id, promotion_code))
-        row = await cur.fetchone()
-        assert row is not None
-        return row
-
-    return await call_db(_call)

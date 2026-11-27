@@ -77,3 +77,9 @@ async def refresh(conn: AsyncConnection, refresh_token: str) -> TokenPair:
 
 async def logout(conn: AsyncConnection, refresh_token: str) -> None:
     await refresh_token_repo.revoke(conn, hash_token(refresh_token))
+
+
+async def logout_all(conn: AsyncConnection, user_id: int) -> None:
+    """Đăng xuất khỏi mọi thiết bị: thu hồi toàn bộ refresh token của user.
+    Access token đang cầm vẫn dùng được tới khi hết hạn (JWT không thu hồi được)."""
+    await refresh_token_repo.revoke_all_for_user(conn, user_id)

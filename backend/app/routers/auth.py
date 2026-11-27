@@ -32,6 +32,17 @@ async def logout(data: RefreshRequest, conn: AsyncConnection = Depends(get_conn)
     await auth_service.logout(conn, data.refresh_token)
 
 
+@router.post("/logout-all", status_code=204)
+async def logout_all(
+    user: dict[str, Any] = Depends(get_current_user),
+    conn: AsyncConnection = Depends(get_conn),
+):
+    """Đăng xuất khỏi mọi thiết bị: thu hồi toàn bộ refresh token của chính
+    người đang đăng nhập (cần access token). Access token hiện tại vẫn còn hiệu
+    lực tới khi hết hạn."""
+    await auth_service.logout_all(conn, user["id"])
+
+
 @router.get("/me", response_model=UserOut)
 async def me(user: dict[str, Any] = Depends(get_current_user)):
     return user

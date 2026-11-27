@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:4200"]
     smtp_host: str = "localhost"
     smtp_port: int = 1025
+    # Rate limit chung theo IP (request/phút). Login có giới hạn riêng 10 lần/phút.
+    rate_limit_per_minute: int = 300
 
 
 @lru_cache

@@ -228,7 +228,10 @@ BEGIN
     WHERE o.status <> 'cancelled'
       AND o.created_at BETWEEN p_from AND p_to
     GROUP BY pv.product_id, p.name
-    ORDER BY total_quantity_sold DESC
+    -- Dung so thu tu cot: trong ham RETURNS TABLE, ten "total_quantity_sold"
+    -- bi hieu la bien OUT (NULL) chu khong phai cot SUM => khong sap xep gi,
+    -- va LIMIT cat mat sach ban chay that.
+    ORDER BY 3 DESC, 4 DESC
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql STABLE;
@@ -299,6 +302,12 @@ BEGIN
         RAISE EXCEPTION 'Order item % is not eligible for review by user %', p_order_item_id, p_user_id;
     END IF;
 
+    -- reviews.order_item_id UNIQUE: kiem tra truoc de tra 409 ro rang thay vi
+    -- de unique_violation lot ra thanh 500 (call_db chi bat RAISE EXCEPTION)
+    IF EXISTS (SELECT 1 FROM reviews WHERE order_item_id = p_order_item_id) THEN
+        RAISE EXCEPTION 'Order item % has already been reviewed', p_order_item_id;
+    END IF;
+
     INSERT INTO reviews (product_id, user_id, order_item_id, rating, comment)
     VALUES (v_product_id, p_user_id, p_order_item_id, p_rating, p_comment)
     RETURNING id INTO v_review_id;
@@ -309,6 +318,8 @@ $$ LANGUAGE plpgsql;
 
 -- ------------------------------------------------------------
 -- 12. get_book_recommendations — "khach mua cung" + cung danh muc
+--     API: GET /api/v1/products/{id}/recommendations. Chi goi y sach dang
+--     ban (chua xoa mem, is_active = true).
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_book_recommendations(
     p_product_id BIGINT,
@@ -331,6 +342,7 @@ BEGIN
         WHERE pv1.product_id = p_product_id
           AND pv2.product_id <> p_product_id
           AND p2.deleted_at IS NULL
+          AND p2.is_active
         GROUP BY p2.id, p2.name, p2.base_price
         ORDER BY COUNT(*) DESC
         LIMIT p_limit
@@ -342,6 +354,7 @@ BEGIN
         JOIN products p2 ON p2.category_id = p1.category_id AND p2.id <> p1.id
         WHERE p1.id = p_product_id
           AND p2.deleted_at IS NULL
+          AND p2.is_active
           AND p2.id NOT IN (
               SELECT pv2.product_id
               FROM order_items oi1
@@ -630,14 +643,9 @@ CREATE OR REPLACE FUNCTION create_inventory_for_variant(
             updated_at = now();
 $$ LANGUAGE sql;
 
-CREATE OR REPLACE FUNCTION get_inventory_by_variant(p_product_variant_id BIGINT)
-RETURNS TABLE (
-    id BIGINT, product_variant_id BIGINT, quantity_on_hand INT,
-    quantity_reserved INT, reorder_level INT, updated_at TIMESTAMPTZ
-) AS $$
-    SELECT i.id, i.product_variant_id, i.quantity_on_hand, i.quantity_reserved, i.reorder_level, i.updated_at
-    FROM inventories i WHERE i.product_variant_id = p_product_variant_id;
-$$ LANGUAGE sql STABLE;
+-- Da bo: khong API nao dung (ton kho tra kem trong get_book_by_id). DROP de
+-- DB da migrate truoc do cung xoa theo (CREATE OR REPLACE khong tu xoa ham cu).
+DROP FUNCTION IF EXISTS get_inventory_by_variant(BIGINT);
 
 CREATE OR REPLACE FUNCTION update_inventory_reorder_level(p_product_variant_id BIGINT, p_reorder_level INT)
 RETURNS VOID AS $$

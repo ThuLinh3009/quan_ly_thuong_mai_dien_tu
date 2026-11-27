@@ -132,6 +132,24 @@ async def get_product(
     return product
 
 
+async def get_recommendations(
+    conn: AsyncConnection, product_id: int, limit: int, current_user: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """Gợi ý sách cho trang chi tiết: ưu tiên sách hay được mua cùng đơn, thiếu
+    thì bù sách cùng danh mục. Sách gốc không xem được (đã xóa/ẩn) -> 404."""
+    await get_product(conn, product_id, current_user)
+
+    # Cùng prefix với danh sách sản phẩm -> tự xóa cache khi sửa/xóa/ẩn sách.
+    cache_key = f"{PRODUCT_PREFIX}:recommendations:{product_id}:{limit}"
+    cached = await get_json(cache_key)
+    if cached is not None:
+        return cached
+
+    rows = await product_repo.recommendations(conn, product_id, limit)
+    await set_json(cache_key, rows)
+    return rows
+
+
 async def update_product(
     conn: AsyncConnection, product_id: int, data: ProductUpdate, current_user: dict[str, Any]
 ) -> dict[str, Any]:
@@ -212,14 +230,21 @@ async def add_variant(
     return refreshed
 
 
+async def _get_variant_of_live_product(conn: AsyncConnection, variant_id: int) -> dict[str, Any]:
+    """Biến thể của sản phẩm đã xóa mềm coi như không tồn tại (404), giống
+    add_variant() — tránh sửa dữ liệu rồi mới phát hiện product đã bị xóa."""
+    variant = await variant_repo.get_by_id(conn, variant_id)
+    if variant is None or await product_repo.get_by_id(conn, variant["product_id"]) is None:
+        raise NotFoundError(f"Không tìm thấy biến thể id={variant_id}")
+    return variant
+
+
 async def update_variant(
     conn: AsyncConnection, variant_id: int, data: VariantUpdate, current_user: dict[str, Any]
 ) -> dict[str, Any]:
     """update_variant() (DB) ghi đè toàn bộ giá trị — merge field cũ + field
     client gửi (exclude_unset) thành giá trị cuối cùng trước khi gọi."""
-    old = await variant_repo.get_by_id(conn, variant_id)
-    if old is None:
-        raise NotFoundError(f"Không tìm thấy biến thể id={variant_id}")
+    old = await _get_variant_of_live_product(conn, variant_id)
 
     payload = data.model_dump(exclude_unset=True, exclude={"reorder_level"})
     updated = await variant_repo.update(
@@ -245,9 +270,7 @@ async def update_variant(
 
 
 async def deactivate_variant(conn: AsyncConnection, variant_id: int, current_user: dict[str, Any]) -> dict[str, Any]:
-    old = await variant_repo.get_by_id(conn, variant_id)
-    if old is None:
-        raise NotFoundError(f"Không tìm thấy biến thể id={variant_id}")
+    old = await _get_variant_of_live_product(conn, variant_id)
 
     updated = await variant_repo.set_active(conn, variant_id, False)
     await record_audit(

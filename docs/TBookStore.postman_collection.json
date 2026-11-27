@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TBookStore API — Sprint 1-4 (đầy đủ)",
-    "description": "Collection test tay Sprint 1-4 day du: auth/JWT/RBAC, danh muc/san pham/kho/nhan su (Sprint 1-2), gio hang/checkout/don hang/khuyen mai/tra hang/danh gia (Sprint 3), thong ke/bao cao PDF/celery/bao mat (Sprint 4). Chay 'Login - Admin' va 'Login - Customer' truoc; request Admin/Staff dung {{access_token}} qua collection-level auth, request rieng cho khach hang (gio hang/checkout/danh gia/tra hang) tu override sang {{customer_access_token}}.",
+    "description": "Collection test Sprint 1-4 (auth/JWT/RBAC, danh mục, sản phẩm, kho, nhân sự, giỏ hàng, checkout, đơn hàng, khuyến mãi, hoàn tiền, đánh giá, thống kê). Mọi request đều có assertion (pm.test) và được sắp thứ tự để chạy liền 1 lượt:\n\n    postman collection run docs/TBookStore.postman_collection.json\n\nChạy từ thư mục gốc repo (request import Excel đọc docs/postman_import_products_sample.xlsx). URL ghi thẳng http://localhost:5080 (API Gateway), không dùng biến base_url/api_url. Cần DB có tài khoản mẫu trong database/seed.sql. Dữ liệu tạo mới dùng timestamp nên chạy lại nhiều lần không bị trùng. Bộ test có ~130 request, dưới rate limit 300 request/phút/IP (RATE_LIMIT_PER_MINUTE) — chạy liên tiếp 3 lần trong cùng 1 phút sẽ gặp 429.\n\nRequest Admin/Staff dùng {{access_token}} qua auth cấp collection; request của khách override sang {{customer_access_token}}; ca âm của nhân viên dùng {{staff_access_token}}.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -15,14 +15,6 @@
     ]
   },
   "variable": [
-    {
-      "key": "base_url",
-      "value": "http://localhost:8000"
-    },
-    {
-      "key": "api_url",
-      "value": "{{base_url}}/api/v1"
-    },
     {
       "key": "access_token",
       "value": ""
@@ -65,7 +57,7 @@
     },
     {
       "key": "address_id",
-      "value": "1"
+      "value": ""
     },
     {
       "key": "promotion_id",
@@ -80,6 +72,10 @@
       "value": "1"
     },
     {
+      "key": "cod_order_id",
+      "value": "1"
+    },
+    {
       "key": "order_item_id",
       "value": "1"
     },
@@ -90,30 +86,116 @@
     {
       "key": "report_task_id",
       "value": ""
+    },
+    {
+      "key": "reg_email",
+      "value": ""
+    },
+    {
+      "key": "reg_phone",
+      "value": ""
+    },
+    {
+      "key": "old_refresh_token",
+      "value": ""
+    },
+    {
+      "key": "product_sku",
+      "value": ""
+    },
+    {
+      "key": "variant2_id",
+      "value": ""
+    },
+    {
+      "key": "staff_email",
+      "value": ""
+    },
+    {
+      "key": "voucher_code",
+      "value": ""
+    },
+    {
+      "key": "promo_starts_at",
+      "value": ""
+    },
+    {
+      "key": "promo_ends_at",
+      "value": ""
+    },
+    {
+      "key": "report_ready",
+      "value": ""
+    },
+    {
+      "key": "cod2_order_id",
+      "value": ""
+    },
+    {
+      "key": "la_access_token",
+      "value": ""
+    },
+    {
+      "key": "la_refresh_token",
+      "value": ""
+    },
+    {
+      "key": "staff2_refresh_token",
+      "value": ""
     }
   ],
   "item": [
     {
-      "name": "Health",
+      "name": "00. Health",
       "item": [
         {
           "name": "Health check",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/health"
-          }
+            "url": "http://localhost:5080/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"status = ok\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"ok\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Health check DB",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/health/db"
-          }
+            "url": "http://localhost:5080/health/db"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Auth",
+      "name": "01. Auth",
       "item": [
         {
           "name": "Register (customer)",
@@ -125,23 +207,62 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/auth/register",
+            "url": "http://localhost:5080/api/v1/auth/register",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"customer1@tbookstore.vn\",\n  \"password\": \"Customer@123\",\n  \"full_name\": \"Khach Hang A\",\n  \"phone\": \"0911111111\"\n}"
+              "raw": "{\n  \"email\": \"{{reg_email}}\",\n  \"password\": \"Customer@123\",\n  \"full_name\": \"Khach Hang A\",\n  \"phone\": \"{{reg_phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const n = Date.now();",
+                  "pm.collectionVariables.set(\"reg_email\", `khach_${n}@example.com`);",
+                  "pm.collectionVariables.set(\"reg_phone\", \"09\" + String(n).slice(-8));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Tạo đúng tài khoản customer, không lộ mật khẩu\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.email).to.eql(pm.collectionVariables.get(\"reg_email\"));",
+                  "    pm.expect(d.role).to.eql(\"customer\");",
+                  "    pm.expect(d).to.not.have.any.keys(\"password\", \"password_hash\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Login - Admin",
+          "name": "Register - email đã tồn tại → 409",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json();",
-                  "pm.collectionVariables.set('access_token', data.access_token);",
-                  "pm.collectionVariables.set('refresh_token', data.refresh_token);"
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
                 ]
               }
             }
@@ -154,10 +275,103 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/auth/login",
+            "url": "http://localhost:5080/api/v1/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@tbookstore.vn\",\n  \"password\": \"Customer@123\",\n  \"full_name\": \"Trung Email\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login - sai mật khẩu → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@tbookstore.vn\",\n  \"password\": \"SaiMatKhau@1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login - Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có access_token + refresh_token\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.access_token).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(d.refresh_token).to.be.a(\"string\").and.not.empty;",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"access_token\", d.access_token);",
+                  "    pm.collectionVariables.set(\"refresh_token\", d.refresh_token);",
+                  "}",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(\"Dừng chạy: Login admin thất bại -> các request sau sẽ lỗi dây chuyền.\");",
+                  "    pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/login",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"admin@tbookstore.vn\",\n  \"password\": \"Admin@123\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           }
         },
@@ -165,7 +379,7 @@
           "name": "Login - Customer",
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/auth/login",
+            "url": "http://localhost:5080/api/v1/auth/login",
             "header": [
               {
                 "key": "Content-Type",
@@ -175,15 +389,28 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"customer@tbookstore.vn\",\n  \"password\": \"Customer@123\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json();",
-                  "pm.collectionVariables.set('customer_access_token', data.access_token);"
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"customer_access_token\", d.access_token);",
+                  "}",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(\"Dừng chạy: Login customer thất bại -> các request sau sẽ lỗi dây chuyền.\");",
+                  "    pm.execution.setNextRequest(null);",
+                  "}"
                 ]
               }
             }
@@ -195,9 +422,19 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json();",
-                  "pm.collectionVariables.set('staff_access_token', data.access_token);"
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"staff_access_token\", d.access_token);",
+                  "}",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(\"Dừng chạy: Login staff thất bại -> các request sau sẽ lỗi dây chuyền.\");",
+                  "    pm.execution.setNextRequest(null);",
+                  "}"
                 ]
               }
             }
@@ -210,10 +447,13 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/auth/login",
+            "url": "http://localhost:5080/api/v1/auth/login",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"staff@tbookstore.vn\",\n  \"password\": \"Staff@123\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           }
         },
@@ -221,12 +461,31 @@
           "name": "Refresh token",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"old_refresh_token\", pm.collectionVariables.get(\"refresh_token\"));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json();",
-                  "pm.collectionVariables.set('access_token', data.access_token);",
-                  "pm.collectionVariables.set('refresh_token', data.refresh_token);"
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Phát hành refresh token MỚI (rotation)\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.refresh_token).to.not.eql(pm.collectionVariables.get(\"old_refresh_token\"));",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"access_token\", d.access_token);",
+                  "    pm.collectionVariables.set(\"refresh_token\", d.refresh_token);",
+                  "}"
                 ]
               }
             }
@@ -239,11 +498,53 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/auth/refresh",
+            "url": "http://localhost:5080/api/v1/auth/refresh",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
             }
+          }
+        },
+        {
+          "name": "Refresh - dùng lại refresh token cũ → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{old_refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Token cũ đã bị thu hồi khi rotation, không được dùng lại."
           }
         },
         {
@@ -256,41 +557,44 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/auth/logout",
+            "url": "http://localhost:5080/api/v1/auth/logout",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Me",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/auth/me"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Categories",
-      "item": [
-        {
-          "name": "List categories",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/categories?limit=20&offset=0"
-          }
-        },
-        {
-          "name": "Get category by id",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/categories/{{category_id}}"
-          }
-        },
-        {
-          "name": "Create category (admin)",
+          "name": "Refresh - sau khi logout → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -299,12 +603,375 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/categories",
+            "url": "http://localhost:5080/api/v1/auth/refresh",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Ngoại văn\"\n}"
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng tài khoản admin\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.email).to.eql(\"admin@tbookstore.vn\");",
+                  "    pm.expect(d.role).to.eql(\"admin\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me - không gửi token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/auth/me",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login - khách vừa đăng ký (chuẩn bị test logout-all)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{reg_email}}\",\n  \"password\": \"Customer@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"la_access_token\", d.access_token);",
+                  "    pm.collectionVariables.set(\"la_refresh_token\", d.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout all - không gửi token → 401",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/auth/logout-all",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout all devices (thu hồi mọi refresh token)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/auth/logout-all",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{la_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Thu hồi toàn bộ refresh token của chính người đang đăng nhập (gọi function revoke_all_refresh_tokens)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh - sau logout-all → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{la_refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(401);",
+                  "});",
+                  "pm.test(\"Báo token đã bị thu hồi\", function () {",
+                  "    pm.expect(pm.response.json().detail).to.include(\"thu hồi\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me - access token vẫn dùng tới khi hết hạn",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/auth/me",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{la_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "JWT access token không thu hồi được; logout-all chỉ chặn việc xin token mới bằng refresh token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02. Categories",
+      "item": [
+        {
+          "name": "List categories",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/categories?limit=20&offset=0"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Trả về trang dữ liệu\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.be.an(\"array\");",
+                  "    pm.expect(d.total).to.be.a(\"number\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create category (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"category_id\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/categories",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ngoại văn {{$timestamp}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create category - staff → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/categories",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Khong duoc tao {{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staff_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Chỉ admin được tạo danh mục."
+          }
+        },
+        {
+          "name": "Get category by id",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/categories/{{category_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng id\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.id).to.eql(Number(pm.collectionVariables.get(\"category_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Update category (admin)",
@@ -316,41 +983,83 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/categories/{{category_id}}",
+            "url": "http://localhost:5080/api/v1/categories/{{category_id}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Văn học Việt Nam\"\n}"
+              "raw": "{\n  \"name\": \"Văn học Việt Nam {{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "Delete category (admin, soft-delete)",
-          "request": {
-            "method": "DELETE",
-            "url": "{{api_url}}/categories/{{category_id}}"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã đổi tên\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.name).to.match(/^Văn học Việt Nam /);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Suppliers",
+      "name": "03. Suppliers",
       "item": [
         {
           "name": "List suppliers (admin/staff)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/suppliers"
-          }
-        },
-        {
-          "name": "Get supplier by id (admin/staff)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/suppliers/{{supplier_id}}"
-          }
+            "url": "http://localhost:5080/api/v1/suppliers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có items\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Create supplier (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"supplier_id\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -359,12 +1068,36 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/suppliers",
+            "url": "http://localhost:5080/api/v1/suppliers",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"NXB Test\",\n  \"contact_phone\": \"0900111222\",\n  \"email\": \"supplier@tbookstore.vn\"\n}"
+              "raw": "{\n  \"name\": \"NXB Test\",\n  \"contact_phone\": \"0900111222\",\n  \"email\": \"supplier_{{$timestamp}}@tbookstore.vn\"\n}"
             }
           }
+        },
+        {
+          "name": "Get supplier by id (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/suppliers/{{supplier_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng id\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.id).to.eql(Number(pm.collectionVariables.get(\"supplier_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Update supplier (admin)",
@@ -376,45 +1109,238 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/suppliers/{{supplier_id}}",
+            "url": "http://localhost:5080/api/v1/suppliers/{{supplier_id}}",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"address\": \"123 Đường ABC\"\n}"
             }
-          }
-        },
-        {
-          "name": "Deactivate supplier (admin)",
-          "request": {
-            "method": "DELETE",
-            "url": "{{api_url}}/suppliers/{{supplier_id}}"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã cập nhật địa chỉ\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.address).to.eql(\"123 Đường ABC\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Products",
+      "name": "04. Products",
       "item": [
         {
           "name": "List products (public)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/products?limit=20&offset=0&sort_by=created_at&sort_dir=desc"
-          }
+            "url": "http://localhost:5080/api/v1/products?limit=20&offset=0&sort_by=created_at&sort_dir=desc",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Khách vãng lai chỉ thấy sách đang bán\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.be.an(\"array\");",
+                  "    pm.expect(d.items.every(p => p.is_active)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Search products by keyword",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/products?keyword=kim"
-          }
+            "url": "http://localhost:5080/api/v1/products?keyword=kim",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có kết quả chứa 'kim'\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items.some(p => (p.name + \" \" + (p.author || \"\")).toLowerCase().includes(\"kim\"))).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List products - lọc danh mục + khoảng giá, sắp theo giá",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products?category_id=3&min_price=50000&max_price=100000&sort_by=base_price&sort_dir=asc&limit=100",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Ca hồi quy: trước đây lọc theo giá trả 500 (psycopg gửi float là double precision, search_books nhận NUMERIC)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng danh mục, trong khoảng giá, giá tăng dần\", function () {",
+                  "    const items = pm.response.json().items;",
+                  "    const prices = items.map(x => Number(x.base_price));",
+                  "    items.forEach(x => pm.expect(x.category_id).to.eql(3));",
+                  "    prices.forEach(v => pm.expect(v).to.be.within(50000, 100000));",
+                  "    pm.expect(prices).to.eql([...prices].sort((a, b) => a - b));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Get product by id (public)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/products/{{product_id}}"
-          }
+            "url": "http://localhost:5080/api/v1/products/1",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng sách id=1\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.id).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get recommendations (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/1/recommendations?limit=5",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Gợi ý sách: 'khách mua cùng' (cùng xuất hiện trong đơn hàng) trước, sau đó bổ sung sách cùng danh mục. Gọi function get_book_recommendations."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Danh sách gợi ý hợp lệ\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d).to.be.an(\"array\");",
+                  "    pm.expect(d.length).to.be.at.most(5);",
+                  "    const ids = d.map(x => x.product_id);",
+                  "    pm.expect(ids, \"không gợi ý chính sách đang xem\").to.not.include(1);",
+                  "    pm.expect(new Set(ids).size, \"không trùng sách\").to.eql(ids.length);",
+                  "    d.forEach(x => {",
+                  "        pm.expect(x).to.have.all.keys(\"product_id\", \"product_name\", \"base_price\", \"reason\");",
+                  "        pm.expect([\"bought_together\", \"same_category\"]).to.include(x.reason);",
+                  "    });",
+                  "});",
+                  "pm.test(\"'Mua cùng' xếp trước 'cùng danh mục'\", function () {",
+                  "    const r = pm.response.json().map(x => x.reason);",
+                  "    const firstCat = r.indexOf(\"same_category\");",
+                  "    if (firstCat >= 0) pm.expect(r.slice(firstCat)).to.not.include(\"bought_together\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get recommendations - sách không tồn tại → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/999999999/recommendations",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get recommendations - limit > 20 → 422",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/1/recommendations?limit=50",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 422\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(422);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Create product + variant (admin/staff)",
@@ -422,13 +1348,21 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Tạo 1 biến thể, tồn đầu 30\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.variants).to.have.lengthOf(1);",
+                  "    pm.expect(d.variants[0].quantity_on_hand).to.eql(30);",
+                  "});",
                   "if (pm.response.code === 201) {",
-                  "  const data = pm.response.json();",
-                  "  pm.collectionVariables.set('product_id', data.id);",
-                  "  if (data.variants && data.variants.length) {",
-                  "    pm.collectionVariables.set('variant_id', data.variants[0].id);",
-                  "  }",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"product_id\", d.id);",
+                  "    pm.collectionVariables.set(\"product_sku\", d.sku);",
+                  "    pm.collectionVariables.set(\"variant_id\", d.variants[0].id);",
                   "}"
                 ]
               }
@@ -442,39 +1376,28 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/products",
+            "url": "http://localhost:5080/api/v1/products",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"category_id\": {{category_id}},\n  \"sku\": \"SACH-900\",\n  \"name\": \"Sách Test Postman\",\n  \"author\": \"Tac gia Demo\",\n  \"base_price\": 99000,\n  \"variants\": [\n    { \"variant_name\": \"Bìa mềm\", \"sku\": \"SACH-900-BM\", \"initial_quantity\": 30, \"reorder_level\": 5 }\n  ]\n}"
+              "raw": "{\n  \"category_id\": 1,\n  \"sku\": \"SACH-900-{{$timestamp}}\",\n  \"name\": \"Sách Test Postman\",\n  \"author\": \"Tac gia Demo\",\n  \"base_price\": 99000,\n  \"variants\": [\n    { \"variant_name\": \"Bìa mềm\", \"sku\": \"SACH-900-BM-{{$timestamp}}\", \"initial_quantity\": 30, \"reorder_level\": 5 }\n  ]\n}"
             }
           }
         },
         {
-          "name": "Update product (admin/staff)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Create product - SKU trùng → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
               }
-            ],
-            "url": "{{api_url}}/products/{{product_id}}",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"base_price\": 105000\n}"
             }
-          }
-        },
-        {
-          "name": "Delete product (admin/staff, soft-delete)",
-          "request": {
-            "method": "DELETE",
-            "url": "{{api_url}}/products/{{product_id}}"
-          }
-        },
-        {
-          "name": "Add variant to product (admin/staff)",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -483,83 +1406,29 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/products/{{product_id}}/variants",
+            "url": "http://localhost:5080/api/v1/products",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_name\": \"Bìa cứng\",\n  \"sku\": \"SACH-900-BC\",\n  \"price_adjustment\": 25000,\n  \"initial_quantity\": 15,\n  \"reorder_level\": 3\n}"
-            }
-          }
-        },
-        {
-          "name": "Update variant (admin/staff)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{api_url}}/products/variants/{{variant_id}}",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reorder_level\": 8\n}"
-            }
-          }
-        },
-        {
-          "name": "Deactivate variant (admin/staff)",
-          "request": {
-            "method": "PATCH",
-            "url": "{{api_url}}/products/variants/{{variant_id}}/deactivate"
-          }
-        },
-        {
-          "name": "Import products from Excel (admin/staff)",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/products/import-excel",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": []
+              "raw": "{\n  \"category_id\": 1,\n  \"sku\": \"{{product_sku}}\",\n  \"name\": \"Sách trùng SKU\",\n  \"base_price\": 50000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             }
           }
-        }
-      ]
-    },
-    {
-      "name": "Employees (Staff management - admin only)",
-      "item": [
-        {
-          "name": "List staff",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/employees"
-          }
         },
         {
-          "name": "Get staff by id",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/employees/{{staff_id}}"
-          }
-        },
-        {
-          "name": "Create staff",
+          "name": "Create product - customer → 403",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code === 201) {",
-                  "  pm.collectionVariables.set('staff_id', pm.response.json().id);",
-                  "}"
+                  "pm.test(\"Status 403\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(403);",
+                  "});"
                 ]
               }
             }
@@ -572,109 +1441,16 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{api_url}}/employees",
+            "url": "http://localhost:5080/api/v1/products",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"staff2@tbookstore.vn\",\n  \"password\": \"Staff@123\",\n  \"full_name\": \"Nhan vien Hai\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Update staff",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"category_id\": 1,\n  \"sku\": \"CUST-{{$timestamp}}\",\n  \"name\": \"Khach tao sach\",\n  \"base_price\": 50000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "url": "{{api_url}}/employees/{{staff_id}}",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone\": \"0922222222\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Lock staff",
-          "request": {
-            "method": "PATCH",
-            "url": "{{api_url}}/employees/{{staff_id}}/lock"
-          }
-        },
-        {
-          "name": "Unlock staff",
-          "request": {
-            "method": "PATCH",
-            "url": "{{api_url}}/employees/{{staff_id}}/unlock"
-          }
-        },
-        {
-          "name": "Delete staff (soft-delete)",
-          "request": {
-            "method": "DELETE",
-            "url": "{{api_url}}/employees/{{staff_id}}"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Import Lots (Nhập kho)",
-      "item": [
-        {
-          "name": "List import lots (admin/staff)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/import-lots"
-          }
-        },
-        {
-          "name": "Get import lot by id (admin/staff)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/import-lots/{{import_lot_id}}"
-          }
-        },
-        {
-          "name": "Create import lot -> restock (admin/staff)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "  pm.collectionVariables.set('import_lot_id', pm.response.json().id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{api_url}}/import-lots",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"supplier_id\": {{supplier_id}},\n  \"items\": [\n    { \"product_variant_id\": {{variant_id}}, \"quantity\": 50, \"unit_cost\": 40000 }\n  ]\n}"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Addresses (Customer)",
-      "item": [
-        {
-          "name": "List my addresses",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/addresses",
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -688,10 +1464,751 @@
           }
         },
         {
+          "name": "Create product - giá âm → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 422\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(422);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/products",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": 1,\n  \"sku\": \"NEG-{{$timestamp}}\",\n  \"name\": \"Gia am\",\n  \"base_price\": -1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update product (admin/staff)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/products/{{product_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"base_price\": 105000\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Giá mới 105.000\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(Number(d.base_price)).to.eql(105000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add variant to product (admin/staff)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/products/{{product_id}}/variants",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variant_name\": \"Bìa cứng\",\n  \"sku\": \"SACH-900-BC-{{$timestamp}}\",\n  \"price_adjustment\": 25000,\n  \"initial_quantity\": 15,\n  \"reorder_level\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Sách có 2 biến thể\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.variants).to.have.lengthOf(2);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    const bc = d.variants.find(v => v.variant_name === \"Bìa cứng\");",
+                  "    pm.collectionVariables.set(\"variant2_id\", bc.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update variant (admin/staff)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/products/variants/{{variant_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reorder_level\": 8\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"reorder_level = 8\", function () {",
+                  "    const d = pm.response.json();",
+                  "    const v = d.variants.find(x => x.id === Number(pm.collectionVariables.get(\"variant_id\")));",
+                  "    pm.expect(v.reorder_level).to.eql(8);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate variant (admin/staff) - bìa cứng",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:5080/api/v1/products/variants/{{variant2_id}}/deactivate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Biến thể bìa cứng đã ngưng bán\", function () {",
+                  "    const d = pm.response.json();",
+                  "    const v = d.variants.find(x => x.id === Number(pm.collectionVariables.get(\"variant2_id\")));",
+                  "    pm.expect(v.is_active).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import products from Excel (admin/staff)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/products/import-excel",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "docs/postman_import_products_sample.xlsx"
+                }
+              ]
+            },
+            "description": "File mẫu: docs/postman_import_products_sample.xlsx (đường dẫn tính từ thư mục gốc repo). Lần chạy đầu tạo 2 sách, các lần sau báo trùng SKU ở cột failed — đều đúng nghiệp vụ."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đọc đủ 2 dòng của file mẫu (created + failed = 2)\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.created + d.failed).to.eql(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05. Employees (admin only)",
+      "item": [
+        {
+          "name": "List staff",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/employees"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có items\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create staff",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"staff_email\", `nv_${Date.now()}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Vai trò staff\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.role).to.eql(\"staff\");",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"staff_id\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/employees",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{staff_email}}\",\n  \"password\": \"Staff@123\",\n  \"full_name\": \"Nhan vien Hai\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get staff by id",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/employees/{{staff_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng id\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.id).to.eql(Number(pm.collectionVariables.get(\"staff_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update staff",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/employees/{{staff_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"0922222222\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã đổi SĐT\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.phone).to.eql(\"0922222222\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - nhân viên mới (lấy refresh token trước khi khóa)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{staff_email}}\",\n  \"password\": \"Staff@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set(\"staff2_refresh_token\", pm.response.json().refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lock staff",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:5080/api/v1/employees/{{staff_id}}/lock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã khóa\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.is_active).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - nhân viên bị khóa → 401/403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status thuộc [401, 403]\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.be.oneOf([401, 403]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{staff_email}}\",\n  \"password\": \"Staff@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Unlock staff",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:5080/api/v1/employees/{{staff_id}}/unlock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã mở khóa\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.is_active).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh - token trước khi bị khóa → 401 (đã bị thu hồi)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{staff2_refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Nhân viên đã được mở khóa nhưng refresh token cấp TRƯỚC khi khóa vẫn phải bị từ chối: khóa tài khoản đã thu hồi mọi phiên đăng nhập."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(401);",
+                  "});",
+                  "pm.test(\"Bị chặn vì token đã thu hồi (không phải vì tài khoản khóa)\", function () {",
+                  "    pm.expect(pm.response.json().detail).to.include(\"thu hồi\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List staff - staff → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/employees",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staff_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Quản lý nhân sự chỉ dành cho admin."
+          }
+        },
+        {
+          "name": "Delete staff (soft-delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "http://localhost:5080/api/v1/employees/{{staff_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get staff đã xóa → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/employees/{{staff_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Import Lots (Nhập kho)",
+      "item": [
+        {
+          "name": "List import lots (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/import-lots"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create import lot -> restock (admin/staff)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Lô có 1 dòng hàng\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.have.lengthOf(1);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"import_lot_id\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/import-lots",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplier_id\": {{supplier_id}},\n  \"items\": [\n    { \"product_variant_id\": {{variant_id}}, \"quantity\": 50, \"unit_cost\": 40000 }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get import lot by id (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/import-lots/{{import_lot_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng id\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.id).to.eql(Number(pm.collectionVariables.get(\"import_lot_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tồn kho sau nhập = 30 + 50",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"quantity_on_hand = 80\", function () {",
+                  "    const d = pm.response.json();",
+                  "    const v = d.variants.find(x => x.id === Number(pm.collectionVariables.get(\"variant_id\")));",
+                  "    pm.expect(v.quantity_on_hand).to.eql(80);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/{{product_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Addresses (Customer)",
+      "item": [
+        {
+          "name": "List my addresses",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/addresses",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Là mảng\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Create address",
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/addresses",
+            "url": "http://localhost:5080/api/v1/addresses",
             "header": [
               {
                 "key": "Content-Type",
@@ -717,10 +2234,14 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
                   "if (pm.response.code === 201) {",
-                  "  const data = pm.response.json();",
-                  "  pm.collectionVariables.set('address_id', data.id);",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"address_id\", d.id);",
                   "}"
                 ]
               }
@@ -731,7 +2252,57 @@
           "name": "Set address as default",
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/addresses/{{address_id}}/default",
+            "url": "http://localhost:5080/api/v1/addresses/{{address_id}}/default",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chỉ 1 địa chỉ mặc định",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Địa chỉ vừa chọn là mặc định duy nhất\", function () {",
+                  "    const d = pm.response.json();",
+                  "    const defaults = d.filter(a => a.is_default);",
+                  "    pm.expect(defaults).to.have.lengthOf(1);",
+                  "    pm.expect(defaults[0].id).to.eql(Number(pm.collectionVariables.get(\"address_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/addresses",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -747,13 +2318,357 @@
       ]
     },
     {
-      "name": "Cart (Customer)",
+      "name": "08. Promotions - Voucher & Flash sale (Admin)",
       "item": [
         {
-          "name": "Get my cart",
+          "name": "List promotions (admin)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/cart",
+            "url": "http://localhost:5080/api/v1/promotions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create voucher (percentage)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/promotions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{voucher_code}}\",\n  \"type\": \"percentage\",\n  \"value\": 10,\n  \"min_order_amount\": 50000,\n  \"starts_at\": \"{{promo_starts_at}}\",\n  \"ends_at\": \"{{promo_ends_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = Date.now();",
+                  "pm.collectionVariables.set(\"promo_starts_at\", new Date(now - 3600 * 1000).toISOString());",
+                  "pm.collectionVariables.set(\"promo_ends_at\", new Date(now + 30 * 86400 * 1000).toISOString());",
+                  "pm.collectionVariables.set(\"voucher_code\", \"SALE\" + String(now).slice(-7));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Đúng mã\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.code).to.eql(pm.collectionVariables.get(\"voucher_code\"));",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"promotion_id\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create voucher - mã trùng → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/promotions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{voucher_code}}\",\n  \"type\": \"percentage\",\n  \"value\": 5,\n  \"starts_at\": \"{{promo_starts_at}}\",\n  \"ends_at\": \"{{promo_ends_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create voucher - staff → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/promotions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"STAFF{{$timestamp}}\",\n  \"type\": \"fixed_amount\",\n  \"value\": 10000,\n  \"starts_at\": \"{{promo_starts_at}}\",\n  \"ends_at\": \"{{promo_ends_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staff_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Chỉ admin được tạo khuyến mãi."
+          }
+        },
+        {
+          "name": "Create flash sale promotion",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/promotions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"flash_sale\",\n  \"value\": 1,\n  \"starts_at\": \"{{promo_starts_at}}\",\n  \"ends_at\": \"{{promo_ends_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = Date.now();",
+                  "pm.collectionVariables.set(\"promo_starts_at\", new Date(now - 3600 * 1000).toISOString());",
+                  "pm.collectionVariables.set(\"promo_ends_at\", new Date(now + 30 * 86400 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"flash_promotion_id\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add flash sale item",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/promotions/{{flash_promotion_id}}/flash-sale-items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_variant_id\": \"{{variant_id}}\",\n  \"flash_price\": 50000,\n  \"quantity_limit\": 10\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Giá flash 50.000\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(Number(d.flash_price)).to.eql(50000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List flash sale items of a promotion",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/promotions/{{flash_promotion_id}}/flash-sale-items"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có biến thể vừa thêm\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.map(x => x.product_variant_id)).to.include(Number(pm.collectionVariables.get(\"variant_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get active flash sales (public)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/promotions/flash-sales/active",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Flash sale vừa tạo đang chạy\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.map(x => x.product_variant_id)).to.include(Number(pm.collectionVariables.get(\"variant_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate promotion",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/promotions/{{promotion_id}}/deactivate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã tắt\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.is_active).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate promotion",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/promotions/{{promotion_id}}/activate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã bật lại\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.is_active).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09. Cart (Customer)",
+      "item": [
+        {
+          "name": "Clear cart (bắt đầu từ giỏ trống)",
+          "request": {
+            "method": "DELETE",
+            "url": "http://localhost:5080/api/v1/cart",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -764,13 +2679,60 @@
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get my cart",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/cart",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Giỏ trống\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.have.lengthOf(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Add item to cart",
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/cart/items",
+            "url": "http://localhost:5080/api/v1/cart/items",
             "header": [
               {
                 "key": "Content-Type",
@@ -791,13 +2753,196 @@
                 }
               ]
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Áp giá flash sale 50.000 × 2\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.have.lengthOf(1);",
+                  "    pm.expect(Number(d.items[0].unit_price)).to.eql(50000);",
+                  "    pm.expect(Number(d.subtotal)).to.eql(100000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add item - biến thể đã ngưng bán → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/cart/items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_variant_id\": \"{{variant2_id}}\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update quantity 9999 (giỏ cho phép, tồn kho kiểm tra lúc checkout)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Số lượng = 9999\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items[0].quantity).to.eql(9999);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/cart/items/{{variant_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 9999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Checkout - vượt tồn kho → 409",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Chạy lẻ request (chưa chạy '07. Addresses / Create address'): tự lấy địa chỉ mặc định của khách.",
+                  "if (!pm.collectionVariables.get(\"address_id\")) {",
+                  "    pm.sendRequest({",
+                  "        url: \"http://localhost:5080/api/v1/addresses\",",
+                  "        method: \"GET\",",
+                  "        header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"customer_access_token\") }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200 && res.json().length > 0) {",
+                  "            pm.collectionVariables.set(\"address_id\", res.json()[0].id);  // địa chỉ mặc định đứng đầu",
+                  "        } else {",
+                  "            console.warn(\"Không lấy được địa chỉ: chạy 'Login - Customer' và '07. Addresses / Create address' trước.\");",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});",
+                  "pm.test(\"Báo thiếu hàng\", function () {",
+                  "    pm.expect(pm.response.json().detail).to.match(/stock/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/checkout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"payment_method\": \"cod\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Update cart item quantity",
           "request": {
             "method": "PUT",
-            "url": "{{api_url}}/cart/items/{{variant_id}}",
+            "url": "http://localhost:5080/api/v1/cart/items/{{variant_id}}",
             "header": [
               {
                 "key": "Content-Type",
@@ -818,13 +2963,119 @@
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Số lượng = 3\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items[0].quantity).to.eql(3);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Remove item from cart",
           "request": {
             "method": "DELETE",
-            "url": "{{api_url}}/cart/items/{{variant_id}}",
+            "url": "http://localhost:5080/api/v1/cart/items/{{variant_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Giỏ trống\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.have.lengthOf(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Checkout & Orders",
+      "item": [
+        {
+          "name": "Checkout - giỏ trống → 409",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Chạy lẻ request (chưa chạy '07. Addresses / Create address'): tự lấy địa chỉ mặc định của khách.",
+                  "if (!pm.collectionVariables.get(\"address_id\")) {",
+                  "    pm.sendRequest({",
+                  "        url: \"http://localhost:5080/api/v1/addresses\",",
+                  "        method: \"GET\",",
+                  "        header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"customer_access_token\") }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200 && res.json().length > 0) {",
+                  "            pm.collectionVariables.set(\"address_id\", res.json()[0].id);  // địa chỉ mặc định đứng đầu",
+                  "        } else {",
+                  "            console.warn(\"Không lấy được địa chỉ: chạy 'Login - Customer' và '07. Addresses / Create address' trước.\");",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/checkout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"payment_method\": \"cod\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -838,10 +3089,38 @@
           }
         },
         {
-          "name": "Clear cart",
+          "name": "Add item to cart (cho đơn COD)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "DELETE",
-            "url": "{{api_url}}/cart",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/cart/items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_variant_id\": \"{{variant_id}}\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -853,134 +3132,63 @@
               ]
             }
           }
-        }
-      ]
-    },
-    {
-      "name": "Promotions - Voucher & Flash sale (Admin)",
-      "item": [
-        {
-          "name": "Get active flash sales (public)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/promotions/flash-sales/active"
-          }
         },
-        {
-          "name": "List promotions (admin)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/promotions"
-          }
-        },
-        {
-          "name": "Create voucher (percentage)",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/promotions",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"SALE10\",\n  \"type\": \"percentage\",\n  \"value\": 10,\n  \"min_order_amount\": 50000,\n  \"starts_at\": \"2026-01-01T00:00:00Z\",\n  \"ends_at\": \"2027-01-01T00:00:00Z\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "  const data = pm.response.json();",
-                  "  pm.collectionVariables.set('promotion_id', data.id);",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Create flash sale promotion",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/promotions",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"flash_sale\",\n  \"value\": 1,\n  \"starts_at\": \"2026-01-01T00:00:00Z\",\n  \"ends_at\": \"2027-01-01T00:00:00Z\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "  const data = pm.response.json();",
-                  "  pm.collectionVariables.set('flash_promotion_id', data.id);",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Add flash sale item",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/promotions/{{flash_promotion_id}}/flash-sale-items",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"product_variant_id\": \"{{variant_id}}\",\n  \"flash_price\": 50000,\n  \"quantity_limit\": 10\n}"
-            }
-          }
-        },
-        {
-          "name": "List flash sale items of a promotion",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/promotions/{{flash_promotion_id}}/flash-sale-items"
-          }
-        },
-        {
-          "name": "Deactivate promotion",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/promotions/{{promotion_id}}/deactivate"
-          }
-        },
-        {
-          "name": "Activate promotion",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/promotions/{{promotion_id}}/activate"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Checkout & Orders",
-      "item": [
         {
           "name": "Preview checkout (with voucher)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/orders/checkout/preview?promotion_code=SALE10",
+            "url": "http://localhost:5080/api/v1/orders/checkout/preview?promotion_code={{voucher_code}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"100.000 - 10% + 30.000 ship = 120.000\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(Number(d.subtotal)).to.eql(100000);",
+                  "    pm.expect(Number(d.discount_amount)).to.eql(10000);",
+                  "    pm.expect(Number(d.shipping_fee)).to.eql(30000);",
+                  "    pm.expect(Number(d.total_amount)).to.eql(120000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview - mã giảm giá không tồn tại → 404/409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status thuộc [404, 409]\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.be.oneOf([404, 409]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/orders/checkout/preview?promotion_code=KHONGTONTAI",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -997,7 +3205,7 @@
           "name": "Checkout (COD)",
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/orders/checkout",
+            "url": "http://localhost:5080/api/v1/orders/checkout",
             "header": [
               {
                 "key": "Content-Type",
@@ -1021,15 +3229,45 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Chạy lẻ request (chưa chạy '07. Addresses / Create address'): tự lấy địa chỉ mặc định của khách.",
+                  "if (!pm.collectionVariables.get(\"address_id\")) {",
+                  "    pm.sendRequest({",
+                  "        url: \"http://localhost:5080/api/v1/addresses\",",
+                  "        method: \"GET\",",
+                  "        header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"customer_access_token\") }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200 && res.json().length > 0) {",
+                  "            pm.collectionVariables.set(\"address_id\", res.json()[0].id);  // địa chỉ mặc định đứng đầu",
+                  "        } else {",
+                  "            console.warn(\"Không lấy được địa chỉ: chạy 'Login - Customer' và '07. Addresses / Create address' trước.\");",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Đơn pending, COD, tổng 130.000\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"pending\");",
+                  "    pm.expect(d.payment.method).to.eql(\"cod\");",
+                  "    pm.expect(Number(d.total_amount)).to.eql(130000);",
+                  "    pm.expect(d.order_code).to.match(/^ORD-\\d{8}-\\d+$/);",
+                  "});",
                   "if (pm.response.code === 201) {",
-                  "  const data = pm.response.json();",
-                  "  pm.collectionVariables.set('order_id', data.id);",
-                  "  if (data.items && data.items.length) {",
-                  "    pm.collectionVariables.set('order_item_id', data.items[0].id);",
-                  "  }",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"cod_order_id\", d.id);",
                   "}"
                 ]
               }
@@ -1037,81 +3275,28 @@
           ]
         },
         {
-          "name": "Checkout (simulated gateway)",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/orders/checkout",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Giỏ hàng trống sau checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Giỏ đã được dọn\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items).to.have.lengthOf(0);",
+                  "});"
+                ]
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"payment_method\": \"simulated_gateway\"\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{customer_access_token}}",
-                  "type": "string"
-                }
-              ]
             }
-          }
-        },
-        {
-          "name": "Simulate payment gateway callback (success)",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/orders/{{order_id}}/payment/simulate",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"success\": true\n}"
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{customer_access_token}}",
-                  "type": "string"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "List my orders (customer)",
+          ],
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/orders",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{customer_access_token}}",
-                  "type": "string"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get order detail",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/orders/{{order_id}}",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/cart",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1128,7 +3313,7 @@
           "name": "Cancel my order (customer, only when pending)",
           "request": {
             "method": "PATCH",
-            "url": "{{api_url}}/orders/{{order_id}}/status",
+            "url": "http://localhost:5080/api/v1/orders/{{cod_order_id}}/status",
             "header": [
               {
                 "key": "Content-Type",
@@ -1149,71 +3334,58 @@
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã hủy\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"cancelled\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "List all orders (admin/staff)",
+          "name": "Add item to cart (cho đơn COD thứ 2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
-            "url": "{{api_url}}/orders/admin"
-          }
-        },
-        {
-          "name": "Confirm order (admin/staff)",
-          "request": {
-            "method": "PATCH",
-            "url": "{{api_url}}/orders/{{order_id}}/status",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
+            "url": "http://localhost:5080/api/v1/cart/items",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"confirmed\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Mark order as shipping (admin/staff)",
-          "request": {
-            "method": "PATCH",
-            "url": "{{api_url}}/orders/{{order_id}}/status",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"product_variant_id\": \"{{variant_id}}\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"shipping\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Mark order as delivered (admin/staff)",
-          "request": {
-            "method": "PATCH",
-            "url": "{{api_url}}/orders/{{order_id}}/status",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"delivered\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Download invoice PDF",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/orders/{{order_id}}/invoice",
+            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1225,17 +3397,809 @@
               ]
             }
           }
+        },
+        {
+          "name": "Checkout (COD) - đơn thứ 2 để admin xác nhận",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Chạy lẻ request (chưa chạy '07. Addresses / Create address'): tự lấy địa chỉ mặc định của khách.",
+                  "if (!pm.collectionVariables.get(\"address_id\")) {",
+                  "    pm.sendRequest({",
+                  "        url: \"http://localhost:5080/api/v1/addresses\",",
+                  "        method: \"GET\",",
+                  "        header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"customer_access_token\") }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200 && res.json().length > 0) {",
+                  "            pm.collectionVariables.set(\"address_id\", res.json()[0].id);  // địa chỉ mặc định đứng đầu",
+                  "        } else {",
+                  "            console.warn(\"Không lấy được địa chỉ: chạy 'Login - Customer' và '07. Addresses / Create address' trước.\");",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"cod2_order_id\", d.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/checkout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"payment_method\": \"cod\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Khách tự xác nhận đơn → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{cod2_order_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Khách chỉ được hủy đơn của mình."
+          }
+        },
+        {
+          "name": "Confirm order (admin/staff)",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:5080/api/v1/orders/{{cod2_order_id}}/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}"
+            },
+            "description": "Đơn COD cần nhân viên xác nhận. Đơn thanh toán online tự chuyển confirmed khi thanh toán thành công."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"confirmed\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"confirmed\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add item to cart (cho đơn thanh toán online)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/cart/items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_variant_id\": \"{{variant_id}}\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Checkout (simulated gateway)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/orders/checkout",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"payment_method\": \"simulated_gateway\",\n  \"promotion_code\": \"{{voucher_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Chạy lẻ request (chưa chạy '07. Addresses / Create address'): tự lấy địa chỉ mặc định của khách.",
+                  "if (!pm.collectionVariables.get(\"address_id\")) {",
+                  "    pm.sendRequest({",
+                  "        url: \"http://localhost:5080/api/v1/addresses\",",
+                  "        method: \"GET\",",
+                  "        header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"customer_access_token\") }",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200 && res.json().length > 0) {",
+                  "            pm.collectionVariables.set(\"address_id\", res.json()[0].id);  // địa chỉ mặc định đứng đầu",
+                  "        } else {",
+                  "            console.warn(\"Không lấy được địa chỉ: chạy 'Login - Customer' và '07. Addresses / Create address' trước.\");",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Áp voucher 10%, chờ thanh toán\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(Number(d.discount_amount)).to.eql(10000);",
+                  "    pm.expect(Number(d.total_amount)).to.eql(120000);",
+                  "    pm.expect(d.payment.status).to.eql(\"pending\");",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"order_id\", d.id);",
+                  "    pm.collectionVariables.set(\"order_item_id\", d.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulate payment gateway callback (success)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/orders/{{order_id}}/payment/simulate",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"success\": true\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Thanh toán thành công → đơn tự chuyển confirmed\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.payment_status).to.eql(\"success\");",
+                  "    pm.expect(d.order_status).to.eql(\"confirmed\");",
+                  "    pm.expect(d.transaction_ref).to.match(/^SIM-/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulate payment - thanh toán lần 2 → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{order_id}}/payment/simulate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"success\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List my orders (customer)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/orders",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có cả 2 đơn vừa đặt\", function () {",
+                  "    const d = pm.response.json();",
+                  "    const ids = d.items.map(o => o.id);",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"order_id\")));",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"cod_order_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get order detail",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/orders/{{order_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đủ chi tiết đơn\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.id).to.eql(Number(pm.collectionVariables.get(\"order_id\")));",
+                  "    pm.expect(d.items).to.have.lengthOf(1);",
+                  "    pm.expect(d.status).to.eql(\"confirmed\");",
+                  "    pm.expect(d.payment.status).to.eql(\"success\");",
+                  "    pm.expect(d.status_history).to.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List all orders (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/orders/admin"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark order as shipping (admin/staff)",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:5080/api/v1/orders/{{order_id}}/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shipping\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"shipping\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"shipping\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark order as delivered (admin/staff)",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:5080/api/v1/orders/{{order_id}}/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"delivered\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"delivered\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"delivered\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chuyển trạng thái sai (delivered → confirmed) → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/orders/{{order_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Download invoice PDF",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/orders/{{order_id}}/invoice",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Là file PDF\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tồn kho sau bán = 80 - 2 - 2 (đơn COD đã hủy được hoàn kho)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"quantity_on_hand = 76\", function () {",
+                  "    const d = pm.response.json();",
+                  "    const v = d.variants.find(x => x.id === Number(pm.collectionVariables.get(\"variant_id\")));",
+                  "    pm.expect(v.quantity_on_hand).to.eql(76);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/{{product_id}}"
+          }
         }
       ]
     },
     {
-      "name": "Refunds - Tra hang/hoan tien",
+      "name": "11. Reviews - Danh gia san pham",
+      "item": [
+        {
+          "name": "List reviewable order items (customer)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/reviews/reviewable",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có dòng hàng của đơn vừa giao\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.map(x => x.order_item_id)).to.include(Number(pm.collectionVariables.get(\"order_item_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit review (customer, order item must be Delivered)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/reviews",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_item_id\": \"{{order_item_id}}\",\n  \"rating\": 5,\n  \"comment\": \"Rat hay, dong goi can than!\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit review - đánh giá lần 2 → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/reviews",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_item_id\": \"{{order_item_id}}\",\n  \"rating\": 4,\n  \"comment\": \"Danh gia lai\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List reviews for a product (public)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/reviews/product/{{product_id}}",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get product rating summary (public)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/reviews/product/{{product_id}}/summary",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12. Refunds - Tra hang/hoan tien",
       "item": [
         {
           "name": "Create refund request (customer, order must be Delivered)",
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/refunds",
+            "url": "http://localhost:5080/api/v1/refunds",
             "header": [
               {
                 "key": "Content-Type",
@@ -1261,10 +4225,18 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
+                  "pm.test(\"Status 201\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(201);",
+                  "});",
+                  "pm.test(\"Trạng thái requested\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"requested\");",
+                  "});",
                   "if (pm.response.code === 201) {",
-                  "  const data = pm.response.json();",
-                  "  pm.collectionVariables.set('refund_request_id', data.id);",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"refund_request_id\", d.id);",
                   "}"
                 ]
               }
@@ -1272,89 +4244,37 @@
           ]
         },
         {
-          "name": "List my refund requests (customer)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/refunds",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{customer_access_token}}",
-                  "type": "string"
-                }
-              ]
+          "name": "Create refund - gửi lần 2 cho cùng đơn → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
             }
-          }
-        },
-        {
-          "name": "List all refund requests (admin/staff)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/refunds/admin"
-          }
-        },
-        {
-          "name": "Get refund request detail",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/refunds/{{refund_request_id}}"
-          }
-        },
-        {
-          "name": "Approve refund request (admin/staff)",
+          ],
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/refunds/{{refund_request_id}}/process",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
+            "url": "http://localhost:5080/api/v1/refunds",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"approve\": true\n}"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Reviews - Danh gia san pham",
-      "item": [
-        {
-          "name": "List reviewable order items (customer)",
-          "request": {
-            "method": "GET",
-            "url": "{{api_url}}/reviews/reviewable",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{customer_access_token}}",
-                  "type": "string"
+              "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"reason\": \"Gui lai yeu cau\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Submit review (customer, order item must be Delivered)",
-          "request": {
-            "method": "POST",
-            "url": "{{api_url}}/reviews",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"order_item_id\": \"{{order_item_id}}\",\n  \"rating\": 5,\n  \"comment\": \"Rat hay, dong goi can than!\"\n}"
             },
             "auth": {
               "type": "bearer",
@@ -1369,57 +4289,300 @@
           }
         },
         {
-          "name": "List reviews for a product (public)",
+          "name": "List my refund requests (customer)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/reviews/product/{{product_id}}"
+            "url": "http://localhost:5080/api/v1/refunds",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có yêu cầu vừa tạo\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.items.map(r => r.id)).to.include(Number(pm.collectionVariables.get(\"refund_request_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List all refund requests (admin/staff)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/refunds/admin"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get refund request detail",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:5080/api/v1/refunds/{{refund_request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đúng đơn\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.order_id).to.eql(Number(pm.collectionVariables.get(\"order_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Khách tự duyệt hoàn tiền → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/refunds/{{refund_request_id}}/process",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
         {
-          "name": "Get product rating summary (public)",
+          "name": "Approve refund request (admin/staff)",
           "request": {
-            "method": "GET",
-            "url": "{{api_url}}/reviews/product/{{product_id}}/summary"
+            "method": "POST",
+            "url": "http://localhost:5080/api/v1/refunds/{{refund_request_id}}/process",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã hoàn tiền\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.eql(\"refunded\");",
+                  "    pm.expect(d.processed_by).to.be.a(\"number\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duyệt lại yêu cầu đã xử lý → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/refunds/{{refund_request_id}}/process",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]
     },
     {
-      "name": "Statistics & Reports (Admin/Staff)",
+      "name": "13. Statistics & Reports (Admin/Staff)",
       "item": [
         {
           "name": "Top selling books",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/statistics/top-selling-books?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z&limit=10"
-          }
+            "url": "http://localhost:5080/api/v1/statistics/top-selling-books?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z&limit=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Sắp xếp giảm dần theo số lượng bán\", function () {",
+                  "    const d = pm.response.json();",
+                  "    const q = d.map(x => Number(x.total_quantity_sold));",
+                  "    pm.expect(q).to.eql([...q].sort((a, b) => b - a));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Revenue report",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/statistics/revenue-report?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
-          }
+            "url": "http://localhost:5080/api/v1/statistics/revenue-report?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Là mảng\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Revenue report (PDF export)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/statistics/revenue-report/pdf?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
-          }
+            "url": "http://localhost:5080/api/v1/statistics/revenue-report/pdf?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Là file PDF\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Dashboard summary",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/statistics/dashboard?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
-          }
+            "url": "http://localhost:5080/api/v1/statistics/dashboard?date_from=2020-01-01T00:00:00Z&date_to=2030-01-01T00:00:00Z"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Trigger async revenue report (Celery)",
           "request": {
             "method": "POST",
-            "url": "{{api_url}}/reports/revenue/async",
+            "url": "http://localhost:5080/api/v1/reports/revenue/async",
             "header": [
               {
                 "key": "Content-Type",
@@ -1435,9 +4598,19 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json();",
-                  "pm.collectionVariables.set('report_task_id', data.task_id);"
+                  "pm.test(\"Status 202\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(202);",
+                  "});",
+                  "pm.test(\"Có task_id\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.task_id).to.be.a(\"string\").and.not.empty;",
+                  "});",
+                  "if (pm.response.code === 202) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"report_task_id\", d.task_id);",
+                  "}"
                 ]
               }
             }
@@ -1447,17 +4620,228 @@
           "name": "Check async report status",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/reports/revenue/async/{{report_task_id}}"
-          }
+            "url": "http://localhost:5080/api/v1/reports/revenue/async/{{report_task_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Có trạng thái task\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.status).to.be.a(\"string\");",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json();",
+                  "    pm.collectionVariables.set(\"report_ready\", String(d.ready));",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Download async report (once status=SUCCESS)",
           "request": {
             "method": "GET",
-            "url": "{{api_url}}/reports/revenue/async/{{report_task_id}}/download"
+            "url": "http://localhost:5080/api/v1/reports/revenue/async/{{report_task_id}}/download",
+            "description": "Cần Celery worker đang chạy. Nếu worker chưa xử lý xong, API trả 422 — test chấp nhận cả 2 trường hợp."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Worker có thể xong ngay giữa lúc check status và lúc tải -> xét theo response thực tế.",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Báo cáo xong → tải PDF (200, application/pdf)\", function () {",
+                  "        pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Báo cáo chưa xong → 422\", function () {",
+                  "        pm.expect(pm.response.code, pm.response.text().slice(0, 300)).to.eql(422);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "14. Cleanup - xóa mềm / ngưng hoạt động",
+      "item": [
+        {
+          "name": "Deactivate supplier (admin)",
+          "request": {
+            "method": "DELETE",
+            "url": "http://localhost:5080/api/v1/suppliers/{{supplier_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(200);",
+                  "});",
+                  "pm.test(\"Đã ngưng\", function () {",
+                  "    const d = pm.response.json();",
+                  "    pm.expect(d.is_active).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete category (admin, soft-delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "http://localhost:5080/api/v1/categories/{{category_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete product (admin/staff, soft-delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "http://localhost:5080/api/v1/products/{{product_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get product đã xóa (khách) → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/{{product_id}}",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get recommendations của sách đã xóa → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "http://localhost:5080/api/v1/products/{{product_id}}/recommendations",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update variant của sách đã xóa → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", function () {",
+                  "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "http://localhost:5080/api/v1/products/variants/{{variant_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reorder_level\": 9\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Áp dụng cho MỌI request: server không được lỗi 5xx, và báo rõ khi bị rate limit.",
+          "pm.test(\"[chung] Không lỗi server 5xx\", function () {",
+          "    pm.expect(pm.response.code, \"Body: \" + pm.response.text().slice(0, 300)).to.be.below(500);",
+          "});",
+          "if (pm.response.code === 429) {",
+          "    console.log(\"Bị rate limit (120 request/phút/IP). Đợi 1 phút rồi chạy lại, hoặc thêm --delay-request 600.\");",
+          "}"
+        ]
+      }
     }
   ]
 }

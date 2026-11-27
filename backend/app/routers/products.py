@@ -12,6 +12,7 @@ from app.schemas.product import (
     ProductListItem,
     ProductOut,
     ProductUpdate,
+    RecommendationOut,
     VariantCreate,
     VariantUpdate,
 )
@@ -58,6 +59,18 @@ async def get_product(
     current_user: dict[str, Any] | None = Depends(get_optional_user),
 ):
     return await product_service.get_product(conn, product_id, current_user)
+
+
+@router.get("/{product_id}/recommendations", response_model=list[RecommendationOut])
+async def get_recommendations(
+    product_id: int,
+    limit: int = Query(default=8, ge=1, le=20),
+    conn: AsyncConnection = Depends(get_conn),
+    current_user: dict[str, Any] | None = Depends(get_optional_user),
+):
+    """Gợi ý sách: "khách mua cùng" (cùng xuất hiện trong đơn hàng) trước, sau
+    đó bổ sung sách cùng danh mục cho đủ `limit`. Không cần đăng nhập."""
+    return await product_service.get_recommendations(conn, product_id, limit, current_user)
 
 
 @router.post("", response_model=ProductOut, status_code=201)

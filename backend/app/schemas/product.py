@@ -92,6 +92,13 @@ class ProductOut(BaseModel):
     variants: list[VariantOut]
 
 
+class RecommendationOut(BaseModel):
+    product_id: int
+    product_name: str
+    base_price: Decimal
+    reason: str = Field(description="bought_together = khách hay mua cùng; same_category = cùng danh mục")
+
+
 class ExcelImportResult(BaseModel):
     created: int
     failed: int

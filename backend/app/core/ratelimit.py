@@ -39,7 +39,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     áp dụng cho toàn bộ API. Endpoint nhạy cảm hơn (login) dùng thêm
     `enforce_rate_limit()` làm dependency riêng, chặt hơn."""
 
-    def __init__(self, app, *, limit: int = 120, window: int = 60) -> None:
+    def __init__(self, app, *, limit: int = 300, window: int = 60) -> None:
         super().__init__(app)
         self.limit = limit
         self.window = window

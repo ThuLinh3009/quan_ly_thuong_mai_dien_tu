@@ -66,8 +66,9 @@ app.add_middleware(
 )
 
 # Rate limit chung theo IP (Sprint 4, mục 44) — /auth/login có giới hạn riêng
-# chặt hơn qua dependency app.core.ratelimit.login_rate_limit.
-app.add_middleware(RateLimitMiddleware, limit=120, window=60)
+# chặt hơn qua dependency app.core.ratelimit.login_rate_limit. Đổi ngưỡng bằng
+# biến môi trường RATE_LIMIT_PER_MINUTE (mặc định 300).
+app.add_middleware(RateLimitMiddleware, limit=settings.rate_limit_per_minute, window=60)
 
 
 @app.middleware("http")

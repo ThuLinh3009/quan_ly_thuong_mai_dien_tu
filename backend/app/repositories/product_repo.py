@@ -60,8 +60,12 @@ async def list_products(
     limit: int,
     offset: int,
 ) -> tuple[list[dict[str, Any]], int]:
+    # Ép kiểu tường minh: psycopg gửi float Python là double precision, mà
+    # PostgreSQL không tự chuyển double -> NUMERIC khi chọn hàm, nên không ép
+    # thì lọc theo giá sẽ lỗi "function search_books(...) does not exist".
     cur = await conn.execute(
-        "SELECT * FROM search_books(%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "SELECT * FROM search_books(%s::text, %s::bigint, %s::numeric, %s::numeric, %s::boolean,"
+        " %s::text, %s::text, %s::int, %s::int)",
         (keyword, category_id, min_price, max_price, is_active, sort_by, sort_dir, limit, offset),
     )
     rows = await cur.fetchall()
@@ -89,6 +93,11 @@ async def update(conn: AsyncConnection, product_id: int, **fields: Any) -> bool:
     )
     row = await cur.fetchone()
     return bool(row["ok"])
+
+
+async def recommendations(conn: AsyncConnection, product_id: int, limit: int) -> list[dict[str, Any]]:
+    cur = await conn.execute("SELECT * FROM get_book_recommendations(%s, %s)", (product_id, limit))
+    return await cur.fetchall()
 
 
 async def soft_delete(conn: AsyncConnection, product_id: int) -> bool:

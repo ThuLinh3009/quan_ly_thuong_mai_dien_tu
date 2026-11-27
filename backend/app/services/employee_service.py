@@ -7,7 +7,7 @@ from psycopg import AsyncConnection
 from app.core.audit import record_audit
 from app.core.errors import ConflictError, NotFoundError
 from app.core.security import hash_password
-from app.repositories import user_repo
+from app.repositories import refresh_token_repo, user_repo
 from app.schemas.common import Page
 from app.schemas.employee import StaffCreate, StaffUpdate
 
@@ -75,6 +75,9 @@ async def set_staff_active(
     updated = await user_repo.set_staff_active(conn, staff_id, is_active)
     if updated is None:
         raise NotFoundError(f"Không tìm thấy nhân viên id={staff_id}")
+    if not is_active:
+        # Khóa tài khoản -> đăng xuất khỏi mọi thiết bị ngay.
+        await refresh_token_repo.revoke_all_for_user(conn, staff_id)
     await record_audit(
         conn, user_id=current_user["id"], action="lock" if not is_active else "unlock", entity_type="staff",
         entity_id=staff_id, old_value=_public(old), new_value=_public(updated),
@@ -87,6 +90,7 @@ async def delete_staff(conn: AsyncConnection, staff_id: int, current_user: dict[
     deleted = await user_repo.soft_delete_staff(conn, staff_id)
     if not deleted:
         raise NotFoundError(f"Không tìm thấy nhân viên id={staff_id}")
+    await refresh_token_repo.revoke_all_for_user(conn, staff_id)
     await record_audit(
         conn, user_id=current_user["id"], action="delete", entity_type="staff",
         entity_id=staff_id, old_value=_public(old),
