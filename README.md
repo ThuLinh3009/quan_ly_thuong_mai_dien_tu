@@ -81,7 +81,6 @@ TBookStore/
 │   ├── ERD.png
 │   └── TBookStore.postman_collection.json
 ├── docker-compose.yml
-├── .env.example
 └── README.md
 ```
 
@@ -141,9 +140,14 @@ CREATE DATABASE tbookstore OWNER tbookstore;
 git clone https://github.com/<username>/TBookStore.git
 cd TBookStore
 
-# 2. Tạo file cấu hình môi trường
-cp .env.example .env
-# Chỉnh các biến: DB connection string, JWT secret, Redis, SMTP (Mailhog)...
+# 2. Tạo file .env ở thư mục gốc (không đưa lên git) với các biến:
+#    DATABASE_URL=postgresql://tbookstore:<mật khẩu>@localhost:5432/tbookstore
+#    REDIS_URL=redis://localhost:6379/0
+#    JWT_SECRET=<chuỗi ngẫu nhiên dài>
+#    SMTP_HOST=localhost
+#    SMTP_PORT=1025
+#    RATE_LIMIT_PER_MINUTE=300
+#    (Thiếu biến nào thì backend dùng giá trị mặc định trong backend/app/core/config.py)
 
 # 3. Khởi động hạ tầng (Gateway + API + Celery + Redis + Mailhog; DB là PostgreSQL trên máy)
 docker compose up -d --build
